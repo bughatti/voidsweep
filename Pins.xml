@@ -1,0 +1,26 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!--
+        VoidSweep world-map pin. Mixin is in Pins.lua (loaded first).
+        NO <Scripts> here on purpose: the MapCanvas framework calls
+        OnLoad/OnAcquired itself and wires OnEnter/OnLeave/OnMouseUp from
+        the mixin methods. Declaring OnEnter/OnLeave scripts trips an
+        assert in Blizzard_MapCanvas (it requires them to be nil).
+        enableMouse must be set at template level so the framework sees
+        mouse enabled during its first-acquire wiring pass.
+    -->
+    <Frame name="VoidSweepPinTemplate" mixin="VoidSweepPinMixin" enableMouse="true" frameStrata="FULLSCREEN" virtual="true">
+        <Size x="14" y="14"/>
+        <Layers>
+            <!-- white circle BEHIND the dot; sized bigger so white shows all
+                 around = a centered white border. Shown only when UP. -->
+            <Layer level="BACKGROUND">
+                <Texture parentKey="ring" hidden="true">
+                    <Anchors><Anchor point="CENTER"/></Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="ARTWORK">
+                <Texture parentKey="icon" setAllPoints="true"/>
+            </Layer>
+        </Layers>
+    </Frame>
+</Ui>
