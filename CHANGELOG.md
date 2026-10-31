@@ -1,5 +1,13 @@
 # VoidSweep Changelog
 
+## 0.2.5
+
+- **Map pins:** changing maps in combat no longer leaves the old map's pins on the new one; a rare someone else reports as up now replaces your dim "remembered" pin instead of hiding behind it, and reports follow your category filters.
+- **Map button counts** no longer count the same rare twice or count rares from other maps.
+- **Sharing:** a report fades when it expires instead of waiting for a map redraw; one player can't keep a "2 players saw it" report alive alone; messages are paced properly.
+- **Waypoints:** VoidSweep never clears a waypoint you set yourself, and only auto-clears its own when you're actually following it.
+- World boss / event changes refresh the map.
+
 ## 0.2.4
 
 - **`/vsw net` shows who else is out there.** Besides checking that sharing works, it now tells you how many other VoidSweep players are online on your realm group right now, and how many rare sightings and spots you've received from other players this session.

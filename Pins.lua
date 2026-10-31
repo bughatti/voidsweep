@@ -180,14 +180,15 @@ function VoidSweepDataProviderMixin:RefreshAllData()
     -- combat and taint. So in combat, LEAVE the existing pins exactly as they
     -- are (map pins are positioned by world coords, so they stay correct) and
     -- do nothing; Core rebuilds on PLAYER_REGEN_ENABLED when combat ends.
-    -- Exception: if the viewed map changed, drop the old map's pins (releasing
-    -- only hides + clears anchors, which is combat-safe) so they don't sit on
-    -- the new map at the old map's coords.
+    -- Exception: if the viewed map changed, HIDE the old map's pins so they
+    -- don't sit on the new map at the old map's coords. Only hide: releasing
+    -- them (RemoveAllPinsByTemplate) marks Blizzard's canvas dirty, writing its
+    -- shared scale/scroll fields from addon code -- the same combat taint.
     local map = self:GetMap()
     local mapID = map and map:GetMapID()
     if InCombatLockdown() then
-        if mapID ~= self.drawnMapID then
-            self:RemoveAllData()
+        if mapID ~= self.drawnMapID and map then
+            for pin in map:EnumeratePinsByTemplate(PIN_TEMPLATE) do pin:Hide() end
             self.drawnMapID = nil
         end
         return
