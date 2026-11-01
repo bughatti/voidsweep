@@ -20,6 +20,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Easy to tell apart** — other players' spots are smaller and fainter until a second player confirms them, and become yours once you see them yourself
 - **Rare sightings** — when another player sees a rare up, it lights up on your map for a few minutes
 - **Hover a shared pin** to see who found it and when
+- **Who's here** — entering a zone tells you how many other VoidSweep players are in it (`/vsw here` asks any time)
 
 ### Clean map
 - **One colored dot per category** — red rares, orange world bosses, yellow treasures, purple lore
@@ -43,6 +44,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 | `/vsw completed` | Show or hide treasures you've already looted |
 | `/vsw minimap` | Minimap pins on or off |
 | `/vsw sync` | Sharing with other players on or off |
+| `/vsw here` | How many other VoidSweep players are in your zone |
 | `/vsw net` | Check that sharing works on your realm, and see how many other VoidSweep players are online there |
 | `/vsw spawns` | List the treasure spots recorded for the delve you're in |
 | `/vsw clear` | Forget every spot VoidSweep has learned or been sent |

@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.6
+
+- **Who's here.** When you enter a zone, VoidSweep tells you how many other VoidSweep players are in it ("3 other VoidSweep players are in Zul'Aman."). It stays quiet when nobody else is there; `/vsw here` asks anytime. Caves and city floors count as their zone, instances aren't counted, players with crowd sync off aren't counted, and players on an older VoidSweep don't answer yet.
+
 ## 0.2.5
 
 - **Map pins:** changing maps in combat no longer leaves the old map's pins on the new one; a rare someone else reports as up now replaces your dim "remembered" pin instead of hiding behind it, and reports follow your category filters.

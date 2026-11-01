@@ -197,13 +197,17 @@ SlashCmdList.VOIDSWEEP = function(msg)
         for _, line in ipairs(VS.Spawns:Report(mapID)) do print("  " .. line) end
         return
     end
+    if msg == "here" then
+        VS.Sync:WhoHere()    -- other VoidSweep players in this zone; prints in ~6s
+        return
+    end
     if msg == "net" or msg == "synctest" then
         VS.Sync:SelfTest()   -- single-client round-trip test; prints results in ~6s
         return
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw net · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw net · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()

@@ -246,9 +246,10 @@ local function pump()
     end
 end
 
-local function send(msg)
+-- urgent = jump the queue (who's-here answers are only useful within seconds)
+local function send(msg, urgent)
     if #queue >= QUEUE_MAX then return end
-    queue[#queue + 1] = msg
+    if urgent then table.insert(queue, 1, msg) else queue[#queue + 1] = msg end
     if not sending then
         pump()
         -- always start the ticker: pump() just emptied the queue, so a
@@ -374,6 +375,131 @@ function Sync:OnSpotMessage(msg, sender)
 end
 
 ----------------------------------------------------------------------
+-- Who's here: entering a zone tells you how many other VoidSweep players
+-- are in it.
+--   P:1:zoneID   "I just arrived" (sent when you enter a zone)
+--   H:1:zoneID   "I'm here too" (answer from players already in that zone)
+-- Answerers wait 0.5-4 s at random and stand down once HERE_CAP others have
+-- answered, so a busy zone sends about HERE_CAP answers and shows "10+".
+-- Subzones and caves count as their zone; instances are skipped. Only
+-- players on a VoidSweep with this feature answer.
+----------------------------------------------------------------------
+local HERE_PROTO = "1"
+local HERE_CAP   = 10
+local HERE_WAIT  = 6      -- seconds the arrival listens before printing
+local ARRIVE_CD  = 120    -- announce the same zone at most this often
+local ASK_CD     = 15     -- /vsw here at most this often
+
+local hereZone            -- zone you're in now (nil in instances)
+local announced           -- zone you last announced
+local lastArrive = {}     -- [zoneID] = GetTime()
+local listen              -- { zone, from = {[name]=true}, n, always }
+local rounds = {}         -- [zoneID] = { n = answers heard, timer = our pending answer }
+
+-- Roll a map up to its zone (city floors, caves and subzones count as the zone).
+local function zoneOf(mapID)
+    local ZONE = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+    local info = mapID and C_Map.GetMapInfo(mapID)
+    local hops = 0
+    while info and info.mapType and info.mapType > ZONE and (info.parentMapID or 0) > 0 and hops < 5 do
+        info = C_Map.GetMapInfo(info.parentMapID)
+        hops = hops + 1
+    end
+    if info and info.mapType == ZONE then return info.mapID, info.name end
+end
+
+local function currentZone()
+    if IsInInstance() then return nil end
+    return zoneOf(C_Map.GetBestMapForUnit("player"))
+end
+
+local function report(zone)
+    local l = listen
+    if not (l and l.zone == zone) then return end
+    listen = nil
+    local now, name = currentZone()
+    if now ~= zone then return end
+    if l.n == 0 then
+        if l.always then
+            print(("|cff00c7ffVoidSweep|r: no other VoidSweep players answered in %s."):format(name or "this zone"))
+        end
+        return
+    end
+    local count = l.n >= HERE_CAP and (HERE_CAP .. "+") or tostring(l.n)
+    print(("|cff00c7ffVoidSweep|r: |cff33ff33%s|r other VoidSweep player%s in %s."):format(
+        count, l.n == 1 and " is" or "s are", name or "this zone"))
+end
+
+-- always = asked by hand: skip the cooldowns and say so even when nobody answers
+local function arrive(always)
+    local zone = currentZone()
+    hereZone = zone
+    if not zone then announced = nil end   -- back from an instance = arriving again
+    if not zone or not enabled() or not netIndex() then return end
+    local cd = always and ASK_CD or ARRIVE_CD
+    if not always and zone == announced then return end
+    if lastArrive[zone] and GetTime() - lastArrive[zone] < cd then
+        if always then print("|cff00c7ffVoidSweep|r: asked a moment ago, try again in a few seconds.") end
+        return
+    end
+    announced = zone
+    lastArrive[zone] = GetTime()
+    listen = { zone = zone, from = {}, n = 0, always = always }
+    send(("P:%s:%d"):format(HERE_PROTO, zone), true)
+    C_Timer.After(HERE_WAIT, function() report(zone) end)
+end
+
+function Sync:WhoHere()
+    if not enabled() then
+        print("|cff00c7ffVoidSweep|r: crowd sync is off (/vsw sync).")
+    elseif not currentZone() then
+        print("|cff00c7ffVoidSweep|r: not counted inside instances.")
+    else
+        arrive(true)
+    end
+end
+
+-- returns true if msg was a who's-here message (handled here)
+function Sync:OnHereMessage(msg, sender)
+    local tag, proto, zoneS = msg:match("^([PH]):(%d+):(%d+)$")
+    if not tag then return false end
+    if proto ~= HERE_PROTO or not enabled() or sender == me then return true end
+    if not spotRateOK(sender) then return true end
+    local zone = tonumber(zoneS)
+
+    -- an arrival counts everyone who says they're in its zone
+    if listen and listen.zone == zone and not listen.from[sender] then
+        listen.from[sender] = true
+        listen.n = listen.n + 1
+    end
+    if zone ~= hereZone then return true end
+
+    -- a round lasts until our answer goes out; a P after that starts a new one
+    local r = rounds[zone]
+    if tag == "P" then
+        if r and r.timer then
+            r.n = 0   -- answers heard so far came before this arrival; ours still covers both
+        else
+            r = { n = 0 }
+            rounds[zone] = r
+            r.timer = C_Timer.NewTimer(0.5 + math.random() * 3.5, function()
+                r.timer = nil
+                if hereZone == zone and r.n < HERE_CAP and enabled() then
+                    send(("H:%s:%d"):format(HERE_PROTO, zone), true)
+                end
+            end)
+        end
+    elseif r and r.timer then
+        r.n = r.n + 1
+        if r.n >= HERE_CAP and r.timer then
+            r.timer:Cancel()
+            r.timer = nil
+        end
+    end
+    return true
+end
+
+----------------------------------------------------------------------
 -- Init
 ----------------------------------------------------------------------
 function Sync:Init()
@@ -385,7 +511,7 @@ function Sync:Init()
     -- system needs to be up first), then ask about the zone we're in.
     C_Timer.After(8, function()
         Sync:JoinNet()
-        C_Timer.After(3, askHere)
+        C_Timer.After(3, function() askHere(); arrive() end)
     end)
 
     local f = CreateFrame("Frame")
@@ -393,7 +519,7 @@ function Sync:Init()
     f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     f:RegisterEvent("ZONE_CHANGED")
     f:SetScript("OnEvent", function(_, event, prefix, msg, _, sender)
-        if event ~= "CHAT_MSG_ADDON" then askHere(); return end
+        if event ~= "CHAT_MSG_ADDON" then askHere(); arrive(); return end
         if prefix ~= PREFIX or type(msg) ~= "string" then return end
         -- self-test echo?
         local nonce = msg:match("^PING:(.+)$")
@@ -407,6 +533,7 @@ function Sync:Init()
             Sync.heard[who] = (Sync.heard[who] or 0) + 1
             Sync.heardTotal = Sync.heardTotal + 1
         end
+        if Sync:OnHereMessage(msg, who) then return end
         if Sync:OnSpotMessage(msg, who) then return end
         Sync:OnMessage(msg, who)
         VS.Pins:Refresh()
