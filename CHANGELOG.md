@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.8
+
+- **Bigger starter map.** A fresh install now knows 358 spots (was 154), including far more of The Coiled Isle and Harandar.
+- **Players-here box.** A small box you can drag anywhere showing how many other VoidSweep (and VoidGather) players are in your zone. Turn it on in the map menu or with `/vsw box`.
+
 ## 0.2.7
 
 - **Directions across continents.** Clicking a pin in another zone or continent now sends you to the right portal first (Silvermoon, Orgrimmar, Stormwind, Voidstorm, Harandar), then on to the spot once you arrive. The waypoint still clears itself when you get there, and VoidSweep never touches a waypoint you set yourself.

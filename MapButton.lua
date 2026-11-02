@@ -92,7 +92,10 @@ local function generator(_, root)
         function() cfg.showMinimap = not cfg.showMinimap; return refresh() end)
     root:CreateCheckbox("Crowd sync",
         function() return cfg.sync end,
-        function() cfg.sync = not cfg.sync; VS.Pins:Refresh(); return refresh() end)
+        function() cfg.sync = not cfg.sync; VS.Pins:Refresh(); VS.Sync:CountNow(); return refresh() end)
+    root:CreateCheckbox("Players-here box",
+        function() return VoidPresence:IsShown() end,
+        function() VoidPresence:SetShown(not VoidPresence:IsShown()); return refresh() end)
 end
 
 function VS.MapButton:Init()

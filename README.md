@@ -12,7 +12,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Up right now** — rares, world bosses, treasures and lore objects near you get a bright pin with a white ring; hover a rare to see its health
 - **World bosses zone-wide** — the zone's world boss and events show as soon as you open the map, wherever you're standing
 - **Remembers what it has seen** — once VoidSweep spots something, its pin stays on your map (dimmed) even after you fly away
-- **Starter map included** — a fresh install already knows over 150 spots captured in game
+- **Starter map included** — a fresh install already knows over 350 rares, treasures, world bosses and lore spots captured in game
 
 ### Shared between players
 - **Spots others find** — when another VoidSweep player on your realm finds a rare, treasure or lore spot, it's added to your map too, so you can find places you've never been
@@ -21,6 +21,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Rare sightings** — when another player sees a rare up, it lights up on your map for a few minutes
 - **Hover a shared pin** to see who found it and when
 - **Who's here** — entering a zone tells you how many other VoidSweep players are in it (`/vsw here` asks any time)
+- **Players-here box** — a small box you can drag anywhere that keeps that count on screen, updated as people come and go (VoidGather players too, if you have it). Turn it on in the map menu or with `/vsw box`
 
 ### Clean map
 - **One colored dot per category** — red rares, orange world bosses, yellow treasures, purple lore
@@ -31,7 +32,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Minimap pins** for remembered spots near you
 
 ### Map menu
-- **A button on the world map** to show or hide each category (with collected/total counts for the zone), completed treasures, minimap pins and sharing
+- **A button on the world map** to show or hide each category (with collected/total counts for the zone), completed treasures, minimap pins, sharing and the players-here box
 
 ---
 
@@ -45,6 +46,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 | `/vsw minimap` | Minimap pins on or off |
 | `/vsw sync` | Sharing with other players on or off |
 | `/vsw here` | How many other VoidSweep players are in your zone |
+| `/vsw box` | Players-here box on or off |
 | `/vsw net` | Check that sharing works on your realm, and see how many other VoidSweep players are online there |
 | `/vsw spawns` | List the treasure spots recorded for the delve you're in |
 | `/vsw clear` | Forget every spot VoidSweep has learned or been sent |

@@ -181,6 +181,7 @@ SlashCmdList.VOIDSWEEP = function(msg)
         local cfg = VS:Config()
         cfg.sync = not cfg.sync
         VS.Pins:Refresh()
+        VS.Sync:CountNow()
         print(("|cff00c7ffVoidSweep|r: crowd sync %s"):format(
             cfg.sync and "|cff33ff33on|r" or "|cffff5555off|r"))
         return
@@ -202,13 +203,19 @@ SlashCmdList.VOIDSWEEP = function(msg)
         VS.Sync:WhoHere()    -- other VoidSweep players in this zone; prints in ~6s
         return
     end
+    if msg == "box" then     -- the "players here" box (PresenceBox.lua)
+        VoidPresence:SetShown(not VoidPresence:IsShown())
+        print(("|cff00c7ffVoidSweep|r: players-here box %s"):format(
+            VoidPresence:IsShown() and "|cff33ff33on|r (drag it anywhere)" or "|cffff5555off|r"))
+        return
+    end
     if msg == "net" or msg == "synctest" then
         VS.Sync:SelfTest()   -- single-client round-trip test; prints results in ~6s
         return
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw net · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()
