@@ -14,7 +14,8 @@
 --   Scanner.lua   reads live vignettes -> VS.Scanner.live
 --   Poi.lua       zone-wide area POIs (world bosses, events)
 --   VoidSync.lua  crowd rare-up channel (VoidSweepNet)
---   Waypoint.lua  VS.Nav:Goto -> SetUserWaypoint + super-track
+--   Route.lua     own waypoint router (portal routing across continents, clear on arrival)
+--   Waypoint.lua  VS.Nav:Goto -> Route:Go
 --   Pins.lua      MapCanvas data provider + pin mixin
 --   Pins.xml      pin frame template
 --   Minimap.lua   minimap pins

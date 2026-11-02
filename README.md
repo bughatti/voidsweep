@@ -27,7 +27,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Delve treasure that moves every run** (like the blue bags) — each spot you find it in gets a faded light-blue dot; once it's turned up in the same spot on **3 different visits** the dot turns **dark green**, meaning "it's usually here". Bags with no minimap icon count too — they're recorded when you open them
 - **Looted treasures disappear** automatically
 - **Rares never disappear** — they respawn, so a rare you've killed stays as a dim pin and brightens when it's back
-- **Click a pin for directions** — sets Blizzard's waypoint and arrow, cleared when you arrive
+- **Click a pin for directions** — sets Blizzard's waypoint and arrow, cleared when you arrive. On another continent it points you to the right portal first, then on to the spot
 - **Minimap pins** for remembered spots near you
 
 ### Map menu

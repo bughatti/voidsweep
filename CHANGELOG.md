@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.7
+
+- **Directions across continents.** Clicking a pin in another zone or continent now sends you to the right portal first (Silvermoon, Orgrimmar, Stormwind, Voidstorm, Harandar), then on to the spot once you arrive. The waypoint still clears itself when you get there, and VoidSweep never touches a waypoint you set yourself.
+
 ## 0.2.6
 
 - **Who's here.** When you enter a zone, VoidSweep tells you how many other VoidSweep players are in it ("3 other VoidSweep players are in Zul'Aman."). It stays quiet when nobody else is there; `/vsw here` asks anytime. Caves and city floors count as their zone, instances aren't counted, players with crowd sync off aren't counted, and players on an older VoidSweep don't answer yet.
