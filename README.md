@@ -29,7 +29,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Looted treasures disappear** automatically
 - **Rares never disappear** — they respawn, so a rare you've killed stays as a dim pin and brightens when it's back
 - **Click a pin for directions** — sets Blizzard's waypoint and arrow, cleared when you arrive. On another continent it points you to the right portal first, then on to the spot
-- **Minimap pins** for remembered spots near you
+- **Minimap pins** for remembered spots near you. They also show on VoidGather's gathering HUD
 
 ### Map menu
 - **A button on the world map** to show or hide each category (with collected/total counts for the zone), completed treasures, minimap pins, sharing and the players-here box

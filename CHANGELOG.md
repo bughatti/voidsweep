@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.9
+
+- **Works with VoidGather's gathering HUD.** VoidSweep's minimap pins stay on the minimap and stay visible when VoidGather turns it into a see-through HUD in front of you.
+
 ## 0.2.8
 
 - **Bigger starter map.** A fresh install now knows 358 spots (was 154), including far more of The Coiled Isle and Harandar.

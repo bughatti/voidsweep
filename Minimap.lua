@@ -32,6 +32,10 @@ local function acquire()
     if not p then
         p = Minimap:CreateTexture(nil, "OVERLAY")
         p:SetSize(PIN_SIZE, PIN_SIZE)
+        -- a gathering HUD (VoidGather's or another addon's) fades the minimap and
+        -- moves what hangs off it: pins stay on it and keep their own opacity
+        p.voidKeep = true
+        p:SetIgnoreParentAlpha(true)
         p:SetAtlas("WhiteCircle-RaidBlips")   -- colored dot, tinted per category
         pool[nActive] = p
     end
@@ -107,5 +111,6 @@ end
 
 function MM:Init()
     local f = CreateFrame("Frame", nil, Minimap)   -- parented: stops when the minimap is hidden
+    f.voidKeep = true
     f:SetScript("OnUpdate", function() MM:Update() end)
 end
