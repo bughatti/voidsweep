@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.10
+
+- **Settings are per character.** Each character keeps its own VoidSweep settings, and a new character starts with the settings of the one you played last, so nothing resets when you update. If you also run a Void addon with the hub icon by your minimap (VoidBags, VoidAH, VoidGather, ...), right-click it and pick **Copy settings from...** to take another character's settings. Your learned and shared spots stay shared.
+
 ## 0.2.9
 
 - **Works with VoidGather's gathering HUD.** VoidSweep's minimap pins stay on the minimap and stay visible when VoidGather turns it into a see-through HUD in front of you.

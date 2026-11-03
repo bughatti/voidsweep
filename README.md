@@ -72,6 +72,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ## Good to Know
 
+- **Settings are per character.** Each character keeps its own VoidSweep settings, and a new character starts with the settings of the one you played last, so nothing resets when you update. If you also run a Void addon with the hub icon by your minimap (VoidBags, VoidAH, VoidGather, ...), right-click it and pick **Copy settings from...** to take another character's settings. Your learned and shared spots stay shared.
 - The game only shows a rare or treasure to addons when you're fairly close, so a spot appears once you or another VoidSweep player passes by.
 - Sharing reaches players on your realm group who are online and running VoidSweep.
 - Learned spots are saved per account; looted treasures are tracked per character.

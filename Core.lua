@@ -23,6 +23,9 @@
 ----------------------------------------------------------------------
 local ADDON, VS = ...
 _G.VoidSweep = VS
+
+-- Settings are per character (CharSettings.lua); learned and shared spots stay account-wide.
+VS.CharSettings.Register(ADDON, "VoidSweepDB", { "config" })
 VS.name = ADDON
 
 
