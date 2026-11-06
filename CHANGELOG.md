@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.12
+
+- **WoW Forever: offline players no longer counted or messaged.** Forever's sharing channel still lists players who have logged off. When one of them can't be reached, VoidSweep now leaves them out for 30 minutes, so the players box shows who's really online and rare alerts go to players who can get them.
+- **The players box says "Players online" on WoW Forever** (it counts players online, not per zone, there), and it has room for VoidQuest's line too.
+
 ## 0.2.11
 
 - **Sharing works again on WoW Forever.** Forever's live servers stopped carrying addon messages on the hidden sharing channel, so rare alerts and shared spots silently stopped arriving there. On Forever, VoidSweep now sends them by hidden addon whisper to a few other VoidSweep players online instead (they never show in chat). Retail is unchanged.

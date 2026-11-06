@@ -1,6 +1,7 @@
 ----------------------------------------------------------------------
 -- Void "players here" box -- how many other players of each Void addon
--- that shares over a hidden channel (VoidGather, VoidSweep) are in your zone.
+-- that shares over a hidden channel (VoidGather, VoidSweep, VoidQuest on WoW
+-- Forever) are in your zone (Forever: online).
 --
 -- The same file is copied into each of those addons (source of truth:
 -- wow-addons/_shared/PresenceBox.lua; never a shared library). The first copy
@@ -25,11 +26,16 @@ local function db()
     return VoidPresenceDB
 end
 
+-- WoW Forever can't count by zone (its channels carry no addon messages), so there the
+-- box counts each addon's players online and says so in its title.
+local function FOREVER() return RegionalUniqueNamesEnabled ~= nil and RegionalUniqueNamesEnabled() == true end
+local function TITLE() return FOREVER() and "Players online" or "Players here" end
+
 -- Every addon that carries this file saves VoidPresenceDB, and each one's copy
 -- is restored as it loads, so the last to load would win even if it was
 -- disabled last session and holds old settings. Each change is stamped, and as
 -- each addon loads the newest copy is kept.
-local HOSTS = { VoidGather = true, VoidSweep = true }   -- addons that carry this file
+local HOSTS = { VoidGather = true, VoidSweep = true, VoidQuest = true }   -- addons that carry this file
 local newest
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
@@ -84,16 +90,20 @@ local function build()
     f:SetScript("OnClick", function(self)
         if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
         MenuUtil.CreateContextMenu(self, function(_, root)
-            root:CreateTitle("Players here")
+            root:CreateTitle(TITLE())
             root:CreateButton("Hide the box", function() P:SetShown(false) end)
         end)
     end)
     f:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:AddLine("Players here")
-        GameTooltip:AddLine("Other players in your zone running each Void addon, counted over its sharing channel. Updates when people come and go, and every 10 minutes.", 0.8, 0.8, 0.8, true)
-        GameTooltip:AddLine("Busy zones show 10+. Not counted in instances or with sharing off.", 0.6, 0.6, 0.6, true)
-        GameTooltip:AddLine("WoW Forever can't count by zone: there each line (\"... online\") is how many players of that addon are online.", 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine(TITLE())
+        if FOREVER() then
+            GameTooltip:AddLine("Other players online running each Void addon, counted from its sharing channel. Updates every 10 minutes. (WoW Forever can't count by zone.)", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("Not counted with sharing off.", 0.6, 0.6, 0.6, true)
+        else
+            GameTooltip:AddLine("Other players in your zone running each Void addon, counted over its sharing channel. Updates when people come and go, and every 10 minutes.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("Busy zones show 10+. Not counted in instances or with sharing off.", 0.6, 0.6, 0.6, true)
+        end
         GameTooltip:AddLine("Drag to move · right-click for options", 0.4, 0.8, 1)
         GameTooltip:Show()
     end)
@@ -101,7 +111,7 @@ local function build()
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     f.title:SetPoint("TOPLEFT", 8, -5)
     f.title:SetTextColor(A[1], A[2], A[3])
-    f.title:SetText("Players here")
+    f.title:SetText(TITLE())
     f.rows = {}
     f:Hide()
     return f

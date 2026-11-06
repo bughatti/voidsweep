@@ -107,16 +107,45 @@ function Obj:OnRosterUpdate(displayIndex)
     if displayIndex ~= nil and displayIndex == self:DisplayIndex() then self:ReadRoster() end
 end
 
+-- The member list also holds players who can't be whispered right now: logged off (the
+-- server keeps them on the list for a while) or out of reach. The game's connected check
+-- answers "unknown" for everyone but you (live 11-05), so learn it the honest way: a
+-- whisper that comes back "No player named X is currently playing" marks X unreachable for
+-- UNREACH_FOR seconds (not picked, not counted).
+local UNREACH_FOR = 1800
+function Obj:Reachable(name)
+    local t = self.unreach[name:lower()]
+    if t and GetTime() - t < UNREACH_FOR then return false end
+    self.unreach[name:lower()] = nil
+    return true
+end
+
+-- Other members online (nil = unknown), less the ones just found unreachable.
 function Obj:Others()
     if not self.count then return nil end
-    return math.max(0, self.count - 1)
+    local gone = 0
+    if self.count > ROSTER_MAX then
+        -- only a window of the list is read: count every name still marked unreachable
+        for name in pairs(self.unreach) do
+            if not self:Reachable(name) then gone = gone + 1 end
+        end
+    else
+        for _, name in ipairs(self.roster) do
+            if not self:Reachable(name) then gone = gone + 1 end
+        end
+    end
+    return math.max(0, self.count - 1 - gone)
 end
 
 function Obj:Pick(k)
-    local n, out, used = #self.roster, {}, {}
+    local live = {}
+    for _, name in ipairs(self.roster) do
+        if self:Reachable(name) then live[#live + 1] = name end
+    end
+    local n, out, used = #live, {}, {}
     while #out < math.min(k, n) do
         local j = math.random(n)
-        if not used[j] then used[j] = true; out[#out + 1] = self.roster[j] end
+        if not used[j] then used[j] = true; out[#out + 1] = live[j] end
     end
     return out
 end
@@ -125,30 +154,43 @@ function Obj:Noted(name)
     if type(name) == "string" then self.whispered[name:lower()] = GetTime() end
 end
 
--- A member who logged off between the roster read and our whisper makes the game print
--- "No player named X is currently playing." Hide that line for names we just whispered.
-function Obj:HidesNotice(text)
-    if type(text) ~= "string" or not ERR_CHAT_PLAYER_NOT_FOUND_S then return false end
+-- "No player named X is currently playing." for a name we whispered in the last HIDE_FOR
+-- seconds: returns that name (lowercased), else nil.
+function Obj:NoticeName(text)
+    if type(text) ~= "string" or not ERR_CHAT_PLAYER_NOT_FOUND_S then return nil end
     local now, lower = GetTime(), text:lower()
     for name, t in pairs(self.whispered) do
         if now - t > HIDE_FOR then
             self.whispered[name] = nil
         elseif lower == ERR_CHAT_PLAYER_NOT_FOUND_S:format(name):lower() then
-            return true
+            return name
         end
     end
-    return false
 end
+
+-- Hide that line in chat (it's our hidden whisper, not something the player sent).
+function Obj:HidesNotice(text) return self:NoticeName(text) ~= nil end
 
 function Net.New(channel, onRoster)
     local o = setmetatable({ channel = channel, onRoster = onRoster, roster = {}, count = nil,
-                             rosterAt = -ROSTER_EVERY, whispered = {} }, Obj)
+                             rosterAt = -ROSTER_EVERY, whispered = {}, unreach = {} }, Obj)
     local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
     if addFilter then
         addFilter("CHAT_MSG_SYSTEM", function(_, _, text) return o:HidesNotice(text) end)
     end
     local f = CreateFrame("Frame")
     f:RegisterEvent("CHANNEL_ROSTER_UPDATE")
-    f:SetScript("OnEvent", function(_, _, displayIndex) o:OnRosterUpdate(displayIndex) end)
+    f:RegisterEvent("CHAT_MSG_SYSTEM")
+    f:SetScript("OnEvent", function(_, event, a1)
+        if event == "CHANNEL_ROSTER_UPDATE" then
+            o:OnRosterUpdate(a1)
+        else
+            local name = o:NoticeName(a1)   -- our whisper bounced: unreachable for a while
+            if name then
+                o.unreach[name] = GetTime()
+                if o.onRoster then o.onRoster() end   -- the count drops
+            end
+        end
+    end)
     return o
 end
