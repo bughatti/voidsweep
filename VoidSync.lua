@@ -18,6 +18,15 @@
 --     self-corrects the moment your own scan reaches the spot.
 -- No HMAC/signing: any secret would ship in the client, so crypto is
 -- theater. Validation + quorum + self-correction is the real defense.
+--
+-- WoW FOREVER (live 2026-11-05) refuses addon messages in custom channels,
+-- so there VoidSweepNet is only a member list (WhisperNet.lua) and the same
+-- messages go by addon whisper to the bare "First Surname" name: UP and N
+-- to up to FANOUT random members, Q to up to ASK_PEERS, and each of them
+-- whispers its B straight back to the asker (one answer per player per
+-- REPLY_GAP). "Who's here" can't be counted by zone there: the box shows how
+-- many VoidSweep players are online (the channel's member count) and no P/H/L
+-- goes out. /vsw synctest whispers a PING to yourself.
 ----------------------------------------------------------------------
 local ADDON, VS = ...
 VS.Sync = {}
@@ -31,12 +40,21 @@ local SENDER_WINDOW  = 60     -- rate-limit window (s)
 local SENDER_MAX     = 15     -- max accepted msgs per sender per window
 local COORD_TOL      = 0.06   -- allowed drift from seed coords (roaming rares)
 local CHANNEL_NAME   = "VoidSweepNet"  -- General/LFG reject addon msgs; a custom channel doesn't
+-- Forever (whispers)
+local FANOUT         = 8      -- members each rare-up / new spot is whispered to
+local ASK_PEERS      = 4      -- members asked on entering a zone
+local REPLY_MAX_W    = 60     -- spots per whispered answer
+local ANSWER_EVERY   = 30     -- at most one whispered answer (to anyone) per this
+local lastAnyReply
+local REPLY_GAP      = 60     -- one answer per player per this, any map
+local SEND_EVERY_W   = 1.5
 
 Sync.reports = {}   -- [vid] = {mapID,x,y,hp,kind,senders={[name]=t},received,trusted}
 Sync.pending = {}   -- self-test: [nonce] = {channel, got}
 local lastSent = {} -- [vid] = GetTime()
 local bucket   = {} -- [sender] = {n, start}
 local nonceSeq = 0
+local net           -- WhisperNet object on Forever, nil on retail (= channel)
 
 local function now() return GetTime() end
 
@@ -84,6 +102,10 @@ function Sync:Broadcast(entry, x, y, hp)
         math.floor((hp or 0) * 100),
         entry.kind == "worldboss" and "b" or "r")
 
+    if net then   -- Forever: whispered to a few members (through the paced queue, ahead of answers)
+        Sync.SendTo(payload, Sync.Targets(FANOUT), true)
+        return
+    end
     if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
     local ci = netIndex()
     if ci then C_ChatInfo.SendAddonMessage(PREFIX, payload, "CHANNEL", ci) end
@@ -220,7 +242,8 @@ local CODE_KIND = { r = "rare", b = "worldboss", c = "chest", l = "lore" }
 
 local queue, sending = {}, nil
 local spotBucket = {}
-local replyTimer, lastReply, lastQuery = {}, {}, {}
+local replyTimer, lastReply, lastQuery = {}, {}, {}   -- Forever: lastReply[sender .. ":" .. mapID]
+local lastReplyTo = {}   -- Forever: [sender] = GetTime() of our last answer to them
 local me
 local refreshPending
 
@@ -234,29 +257,53 @@ local function cleanName(s)
     return s ~= "" and s or nil
 end
 
+-- An item with .to is an addon whisper (Forever), without one it goes on the
+-- channel (retail).
 local function pump()
-    local msg = table.remove(queue, 1)
-    if not msg then
+    local item = table.remove(queue, 1)
+    if not item then
         if sending then sending:Cancel(); sending = nil end
         return
     end
-    local ci = netIndex()
-    if ci and C_ChatInfo and C_ChatInfo.SendAddonMessage then
-        C_ChatInfo.SendAddonMessage(PREFIX, msg, "CHANNEL", ci)
+    if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return end
+    if not enabled() then wipe(queue); return end   -- sync turned off: nothing more goes out
+    if item.to then
+        if net then net:Noted(item.to) end
+        C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "WHISPER", item.to)
+    else
+        local ci = netIndex()
+        if ci then C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "CHANNEL", ci) end
     end
 end
 
 -- urgent = jump the queue (who's-here answers are only useful within seconds)
-local function send(msg, urgent)
+-- to = whisper target; Forever drops anything without one (its channel refuses them)
+local function send(msg, urgent, to)
     if #queue >= QUEUE_MAX then return end
-    if urgent then table.insert(queue, 1, msg) else queue[#queue + 1] = msg end
+    if net and not to then return end
+    local item = { msg = msg, to = to }
+    if urgent then table.insert(queue, 1, item) else queue[#queue + 1] = item end
     if not sending then
         pump()
         -- always start the ticker: pump() just emptied the queue, so a
         -- "#queue > 0" check here never fired and bursts went out unpaced.
         -- The ticker cancels itself once the queue is empty.
-        sending = C_Timer.NewTicker(SEND_EVERY, pump)
+        sending = C_Timer.NewTicker(net and SEND_EVERY_W or SEND_EVERY, pump)
     end
+end
+
+-- Who a message to "everyone" goes to: nil = the channel (retail); on Forever up
+-- to k random members of VoidSweepNet (empty when nobody else is online).
+function Sync.Targets(k)
+    if not net then return nil end
+    net:RequestRoster()
+    return net:Pick(k)
+end
+
+-- One message to every target (to = nil: once, on the channel).
+function Sync.SendTo(msg, to, urgent)
+    if not to then send(msg, urgent); return end
+    for _, name in ipairs(to) do send(msg, urgent, name) end
 end
 
 local function encode(rec)
@@ -267,27 +314,36 @@ local function encode(rec)
         rec.vignetteID or 0, rec.questID or 0, name)
 end
 
-local function sendSpots(tag, mapID, recs)
+-- Pack spots into as few messages as fit under MAX_LEN; each to every target
+-- (to = nil: once, on the channel).
+local function sendSpots(tag, mapID, recs, to)
     local head = ("%s:%s:%d:"):format(tag, SPOT_PROTO, mapID)
-    local parts, len = {}, #head
+    local msgs, parts, len = {}, {}, #head
     for _, rec in ipairs(recs) do
         local e = encode(rec)
         if e then
             if #parts > 0 and len + 1 + #e > MAX_LEN then
-                send(head .. table.concat(parts, ";"))
+                msgs[#msgs + 1] = head .. table.concat(parts, ";")
                 parts, len = {}, #head
             end
             parts[#parts + 1] = e
             len = len + #e + 1
         end
     end
-    if #parts > 0 then send(head .. table.concat(parts, ";")) end
+    if #parts > 0 then msgs[#msgs + 1] = head .. table.concat(parts, ";") end
+    if not to then
+        for _, m in ipairs(msgs) do send(m) end
+        return
+    end
+    for _, name in ipairs(to) do
+        for _, m in ipairs(msgs) do send(m, false, name) end
+    end
 end
 
 -- Data.lua calls this when you learn a spot the starter map doesn't have.
 function Sync:ShareSpot(mapID, rec)
     if not (enabled() and mapID and rec) then return end
-    sendSpots("N", mapID, { rec })
+    sendSpots("N", mapID, { rec }, Sync.Targets(FANOUT))
 end
 
 local function askHere()
@@ -295,25 +351,73 @@ local function askHere()
     local mapID = C_Map.GetBestMapForUnit("player")
     if not mapID then return end
     if lastQuery[mapID] and GetTime() - lastQuery[mapID] < QUERY_CD then return end
+    if net then
+        net:RequestRoster()
+        if #net.roster == 0 then return end   -- nobody to ask yet; try again on the next zone change
+        lastQuery[mapID] = GetTime()
+        for _, to in ipairs(net:Pick(ASK_PEERS)) do send(("Q:%s:%d"):format(SPOT_PROTO, mapID), false, to) end
+        return
+    end
     lastQuery[mapID] = GetTime()
     send(("Q:%s:%d"):format(SPOT_PROTO, mapID))
+end
+
+local function ownSpots(mapID, cap)
+    local out = {}
+    for _, rec in pairs(VS.Learned:GetForMap(mapID) or {}) do
+        if #out >= cap then break end
+        out[#out + 1] = rec
+    end
+    return out
 end
 
 local function answer(mapID)
     replyTimer[mapID] = nil
     lastReply[mapID] = GetTime()
-    local out = {}
-    for _, rec in pairs(VS.Learned:GetForMap(mapID) or {}) do
-        if #out >= REPLY_MAX then break end
-        out[#out + 1] = rec
-    end
-    sendSpots("B", mapID, out)
+    sendSpots("B", mapID, ownSpots(mapID, REPLY_MAX))
 end
 
+-- Forever: whisper our own spots for a map back to the player who asked. Each
+-- asker gets one answer per REPLY_GAP (any map) and one per map per REPLY_CD,
+-- and only when there's something to say, so a stranger can't make us spam.
+local function answerWhisper(mapID, sender, replyTo)
+    if not replyTo then return end
+    local key, t = sender .. ":" .. mapID, GetTime()
+    if lastReply[key] and t - lastReply[key] < REPLY_CD then return end
+    if lastReplyTo[sender] and t - lastReplyTo[sender] < REPLY_GAP then return end
+    if not next(VS.Learned:GetForMap(mapID) or {}) then return end
+    -- and one answer to anyone every ANSWER_EVERY seconds, so answers can't fill the
+    -- queue and crowd out live rare alerts
+    if lastAnyReply and t - lastAnyReply < ANSWER_EVERY then return end
+    lastReply[key], lastReplyTo[sender], lastAnyReply = t, t, t
+    C_Timer.After(1 + math.random() * 3, function()
+        if enabled() then sendSpots("B", mapID, ownSpots(mapID, REPLY_MAX_W), { replyTo }) end
+    end)
+end
+
+local lastSweep = 0
 local function spotRateOK(sender)
+    local t = GetTime()
+    if t - lastSweep > SENDER_WINDOW then   -- forget senders whose window ran out
+        lastSweep = t
+        for k, b in pairs(spotBucket) do
+            if t - b.start > SENDER_WINDOW then spotBucket[k] = nil end
+        end
+        for k, b in pairs(bucket) do
+            if t - b.start > SENDER_WINDOW then bucket[k] = nil end
+        end
+        if net then
+            for k, v in pairs(lastReply) do
+                if t - v > REPLY_CD then lastReply[k] = nil end
+            end
+            for k, v in pairs(lastReplyTo) do
+                if t - v > REPLY_GAP then lastReplyTo[k] = nil end
+            end
+        end
+    end
     local b = spotBucket[sender]
-    if not b or GetTime() - b.start > SENDER_WINDOW then
-        spotBucket[sender] = { n = 1, start = GetTime() }
+    if not b or t - b.start > SENDER_WINDOW then
+        spotBucket[sender] = { n = 1, start = t }
         return true
     end
     b.n = b.n + 1
@@ -351,7 +455,8 @@ local function takeSpots(mapID, body, sender)
 end
 
 -- returns true if msg was a spot message (handled here)
-function Sync:OnSpotMessage(msg, sender)
+-- replyTo = the name to whisper an answer back to, as the game gave it (Forever)
+function Sync:OnSpotMessage(msg, sender, replyTo)
     local tag, proto, mapS, body = msg:match("^([NQB]):(%d+):(%d+):?(.*)$")
     if not tag then return false end
     if proto ~= SPOT_PROTO or not enabled() or sender == me then return true end
@@ -359,7 +464,9 @@ function Sync:OnSpotMessage(msg, sender)
     local mapID = tonumber(mapS)
     if not (mapID and mapID > 0 and C_Map.GetMapInfo(mapID)) then return true end
 
-    if tag == "Q" then
+    if tag == "Q" and net then
+        if body == "" then answerWhisper(mapID, sender, replyTo) end
+    elseif tag == "Q" then
         if replyTimer[mapID] or (lastReply[mapID] and GetTime() - lastReply[mapID] < REPLY_CD) then return true end
         if not next(VS.Learned:GetForMap(mapID) or {}) then return true end
         replyTimer[mapID] = C_Timer.NewTimer(1 + math.random() * 5, function() answer(mapID) end)
@@ -409,6 +516,12 @@ local leaveTimer = {}     -- [zoneID] = pending "left" timer
 
 local function publish()
     if not _G.VoidPresence then return end
+    if net then
+        -- Forever: players online on VoidSweepNet (no zone counts without channel messages)
+        local others = net:Others()
+        VoidPresence:Set("VoidSweep", "VoidSweep online", others or 0, false, enabled() and others ~= nil)
+        return
+    end
     local n = 0
     for _ in pairs(hereZone and rosters[hereZone] or {}) do n = n + 1 end
     VoidPresence:Set("VoidSweep", "VoidSweep", n, capped[hereZone or 0] or n >= HERE_CAP, enabled() and hereZone ~= nil)
@@ -457,6 +570,11 @@ end
 -- always = asked by hand: skip the cooldowns and say so even when nobody answers
 local function arrive(always)
     local zone = currentZone()
+    if net then   -- Forever: no P/H/L (the channel refuses them); the box counts members
+        hereZone = zone
+        publish()
+        return
+    end
     if zone ~= rosterZone then
         -- left a zone: tell the players there, so their count drops
         -- left a zone: after a few seconds away tell the players there, so their count
@@ -493,9 +611,24 @@ local function arrive(always)
     C_Timer.After(HERE_WAIT, function() report(zone) end)
 end
 
+-- Forever: "N other VoidSweep players online" from the channel's member list.
+local function printOnline()
+    local others = net:Others()
+    if not others then
+        print("|cff00c7ffVoidSweep|r: couldn't read " .. CHANNEL_NAME .. "'s member list yet, try again in a few seconds.")
+    else
+        print(("|cff00c7ffVoidSweep|r: %s%d|r other VoidSweep player%s online (WoW Forever can't count by zone).")
+            :format(others > 0 and "|cff33ff33" or "|cffffd200", others, others == 1 and " is" or "s are"))
+    end
+end
+
 function Sync:WhoHere()
     if not enabled() then
         print("|cff00c7ffVoidSweep|r: crowd sync is off (/vsw sync).")
+    elseif net then
+        Sync:JoinNet()
+        net:RequestRoster(true)
+        C_Timer.After(3.5, printOnline)
     elseif not currentZone() then
         print("|cff00c7ffVoidSweep|r: not counted inside instances.")
     else
@@ -508,6 +641,10 @@ end
 local function recount()
     local zone = currentZone()
     if not (_G.VoidPresence and VoidPresence:IsShown()) then return end
+    if net then
+        if enabled() then net:RequestRoster(true) end   -- publish() runs when it's read
+        return
+    end
     if not zone or zone ~= hereZone or listen or not enabled() or not netIndex() then return end
     lastArrive[zone] = GetTime()
     listen = { zone = zone, from = {}, n = 0, recount = true }
@@ -525,7 +662,7 @@ end
 function Sync:OnHereMessage(msg, sender)
     local tag, proto, zoneS = msg:match("^([PHL]):(%d+):(%d+)$")
     if not tag then return false end
-    if proto ~= HERE_PROTO or not enabled() or sender == me then return true end
+    if net or proto ~= HERE_PROTO or not enabled() or sender == me then return true end
     if not spotRateOK(sender) then return true end
     local zone = tonumber(zoneS)
 
@@ -579,16 +716,30 @@ end
 ----------------------------------------------------------------------
 -- Init
 ----------------------------------------------------------------------
+local HEARD_MAX = 500   -- players remembered for /vsw synctest
+
 function Sync:Init()
-    me = UnitName("player")
+    local Net = VS.WhisperNet
+    if Net and Net.Active() then
+        -- WoW Forever: the channel is a member list, messages go by addon whisper
+        net = Net.New(CHANNEL_NAME, publish)
+        me = Net.Me()
+    else
+        me = UnitName("player")
+    end
     if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
         C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
     end
     -- Join the shared channel a few seconds after login (the chat/channel
     -- system needs to be up first), then ask about the zone we're in.
-    C_Timer.After(8, function()
+    -- Forever: read the member list first; staggered from VoidGather's, which
+    -- selects its own channel at the same moment after login.
+    C_Timer.After(net and 14 or 8, function()
         Sync:JoinNet()
-        C_Timer.After(3, function() askHere(); arrive() end)
+        C_Timer.After(3, function()
+            if net then net:RequestRoster(true) end
+            C_Timer.After(net and 4 or 0, function() askHere(); arrive() end)
+        end)
     end)
     C_Timer.NewTicker(RECOUNT, recount)
     VoidPresence:Listen(function() Sync:CountNow() end)
@@ -597,23 +748,35 @@ function Sync:Init()
     f:RegisterEvent("CHAT_MSG_ADDON")
     f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     f:RegisterEvent("ZONE_CHANGED")
-    f:SetScript("OnEvent", function(_, event, prefix, msg, _, sender)
+    f:SetScript("OnEvent", function(_, event, prefix, msg, dist, sender)
         if event ~= "CHAT_MSG_ADDON" then askHere(); arrive(); return end
         if prefix ~= PREFIX or type(msg) ~= "string" then return end
-        -- self-test echo?
+        -- Forever: whispers only. A Q arriving by guild / raid would otherwise make every
+        -- member who heard it whisper back at once.
+        if net and dist ~= "WHISPER" then return end
+        local who
+        if net then
+            who = VS.WhisperNet.Canon(sender)
+        else
+            who = Ambiguate and Ambiguate(sender or "", "none") or sender
+        end
+        if type(who) ~= "string" or who == "" then return end
+        -- self-test echo? (Forever: only our own whisper counts; anyone can whisper a PING)
         local nonce = msg:match("^PING:(.+)$")
         if nonce then
             local p = Sync.pending[nonce]
-            if p then p.got = true end
+            if p and (not net or who == me) then p.got = true end
             return
         end
-        local who = Ambiguate and Ambiguate(sender or "", "none") or sender
-        if who and who ~= me then
-            Sync.heard[who] = (Sync.heard[who] or 0) + 1
+        if who ~= me then
+            if not net or Sync.heard[who] or Sync.heardPeople < HEARD_MAX then   -- cap: Forever only
+                if not Sync.heard[who] then Sync.heardPeople = Sync.heardPeople + 1 end
+                Sync.heard[who] = (Sync.heard[who] or 0) + 1
+            end
             Sync.heardTotal = Sync.heardTotal + 1
         end
         if Sync:OnHereMessage(msg, who) then return end
-        if Sync:OnSpotMessage(msg, who) then return end
+        if Sync:OnSpotMessage(msg, who, sender) then return end
         Sync:OnMessage(msg, who)
         VS.Pins:Refresh()
     end)
@@ -623,7 +786,7 @@ end
 -- and how many players are in VoidSweepNet right now (= VoidSweep users online
 -- on your realm group, incl. you). The member count comes from the channel
 -- roster; selecting the display channel asks the server to fill it in.
-Sync.heard, Sync.heardTotal = {}, 0
+Sync.heard, Sync.heardTotal, Sync.heardPeople = {}, 0, 0
 
 local function channelMembers()
     if not (GetNumDisplayChannels and GetChannelDisplayInfo) then return nil end
@@ -636,6 +799,16 @@ local function channelMembers()
 end
 
 function Sync:NetStats(done)
+    if net then
+        net:RequestRoster(true)
+        C_Timer.After(3.5, function()
+            printOnline()
+            print(("|cff00c7ffVoidSweep|r: this session -- %d message%s from %d other player%s (rare sightings + shared spots).")
+                :format(Sync.heardTotal, Sync.heardTotal == 1 and "" or "s", Sync.heardPeople, Sync.heardPeople == 1 and "" or "s"))
+            if done then done() end
+        end)
+        return
+    end
     local _, idx = channelMembers()
     if idx and SetSelectedDisplayChannel then pcall(SetSelectedDisplayChannel, idx) end
     C_Timer.After(2, function()
@@ -663,6 +836,25 @@ end
 function Sync:SelfTest()
     Sync.pending = {}
     Sync:JoinNet()
+    if net then
+        -- Forever: an addon whisper to yourself comes back if whispers get through
+        print("|cff00c7ffVoidSweep|r: testing crowd sync by addon whisper (~5s)...")
+        nonceSeq = nonceSeq + 1
+        local nonce = ("%d-%d-%d"):format(math.floor(GetTime() * 100), nonceSeq, math.random(1000, 9999))
+        Sync.pending[nonce] = { channel = "WHISPER", got = false }
+        if me then C_ChatInfo.SendAddonMessage(PREFIX, "PING:" .. nonce, "WHISPER", me) end
+        C_Timer.After(4, function()
+            local ok = Sync.pending[nonce] and Sync.pending[nonce].got
+            if ok then
+                print("|cff20ff20VoidSweep|r: addon whispers |cff33ff33work — crowd sync is live!|r")
+                Sync:NetStats()
+            else
+                print("|cffff5555VoidSweep|r: addon whispers didn't come back — messages aren't getting through here.")
+            end
+            Sync.pending = {}
+        end)
+        return
+    end
     print("|cff00c7ffVoidSweep|r: self-test running (~6s)...")
 
     C_Timer.After(2, function()

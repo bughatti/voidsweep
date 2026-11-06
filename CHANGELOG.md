@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.11
+
+- **Sharing works again on WoW Forever.** Forever's live servers stopped carrying addon messages on the hidden sharing channel, so rare alerts and shared spots silently stopped arriving there. On Forever, VoidSweep now sends them by hidden addon whisper to a few other VoidSweep players online instead (they never show in chat). Retail is unchanged.
+- **On Forever the players box counts VoidSweep players online** (Forever can't count them by zone any more). `/vsw here` says the same.
+
 ## 0.2.10
 
 - **Settings are per character.** Each character keeps its own VoidSweep settings, and a new character starts with the settings of the one you played last, so nothing resets when you update. If you also run a Void addon with the hub icon by your minimap (VoidBags, VoidAH, VoidGather, ...), right-click it and pick **Copy settings from...** to take another character's settings. Your learned and shared spots stay shared.
