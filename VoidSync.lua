@@ -298,7 +298,8 @@ local function pump()
     if not enabled() then wipe(queue); return end   -- sync turned off: nothing more goes out
     if item.to then
         if net then net:Noted(item.to) end
-        C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "WHISPER", item.to)
+        local result = C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "WHISPER", item.to)
+        if net then net:Sent(item.to, result) end
     else
         local ci = netIndex()
         if ci then C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "CHANNEL", ci) end
