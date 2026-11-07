@@ -752,7 +752,10 @@ function Sync:Init()
     local Net = VS.WhisperNet
     if Net and Net.Active() then
         -- WoW Forever: the channel is a member list, messages go by addon whisper
-        net = Net.New(CHANNEL_NAME, publish)
+        -- offline marks saved per account, so a /reload doesn't count logged-off players
+        VoidSweepDB = VoidSweepDB or {}
+        VoidSweepDB.netOffline = VoidSweepDB.netOffline or {}
+        net = Net.New(CHANNEL_NAME, publish, VoidSweepDB.netOffline)
         me = Net.Me()
     else
         me = UnitName("player")

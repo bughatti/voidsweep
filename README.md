@@ -12,7 +12,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Up right now** — rares, world bosses, treasures and lore objects near you get a bright pin with a white ring; hover a rare to see its health
 - **World bosses zone-wide** — the zone's world boss and events show as soon as you open the map, wherever you're standing
 - **Remembers what it has seen** — once VoidSweep spots something, its pin stays on your map (dimmed) even after you fly away
-- **Starter map included** — a fresh install already knows over 350 rares, treasures, world bosses and lore spots captured in game
+- **Starter map included** — a fresh install already knows over 350 Midnight rares, treasures, world bosses and lore spots captured in game, and over 300 WoW Forever rares
 
 ### Shared between players
 - **Spots others find** — when another VoidSweep player on your realm finds a rare, treasure or lore spot, it's added to your map too, so you can find places you've never been
@@ -33,6 +33,10 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ### Map menu
 - **A button on the world map** to show or hide each category (with collected/total counts for the zone), completed treasures, minimap pins, sharing and the players-here box
+
+### WoW Forever
+- **Every Classic rare on your map** — over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) with a pin where they spawn, one pin per rare. Click for directions.
+- The Classic world shows no live markers for rares, so on Forever their pins don't light up when one is up; they show where to look.
 
 ---
 
@@ -81,9 +85,15 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ## Compatibility
 
-- **WoW 12.1.5** (Midnight Season 2)
+- **WoW 12.1.5** (Midnight Season 2) and **WoW Forever**
 - Standalone — nothing else to install
 
 ---
 
-*Part of the Void addon family by Vede · MIT licensed · [Source & bug reports](https://github.com/bughatti/voidsweep) · [All Void addons](https://www.curseforge.com/members/bughatti/projects) · free M+ & raid player lookups at [voidscout.io](https://voidscout.io) · more at [tinkerline.io](https://tinkerline.io) · [Discord](https://discord.gg/7ZHmx7zMDh)*
+## Credits
+
+- **WoW Forever rares and their spawn spots** come from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB) by Maro (GPL-3.0), which builds on [QuestieDB](https://github.com/Questie/Questie) (GPL-3.0) and pfQuest, and reads WoW Forever's own game tables. Thank you.
+
+---
+
+*Part of the Void addon family by Vede · GPL-3.0 licensed · [Source & bug reports](https://github.com/bughatti/voidsweep) · [All Void addons](https://www.curseforge.com/members/bughatti/projects) · free M+ & raid player lookups at [voidscout.io](https://voidscout.io) · more at [tinkerline.io](https://tinkerline.io) · [Discord](https://discord.gg/7ZHmx7zMDh)*

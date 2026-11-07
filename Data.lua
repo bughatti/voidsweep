@@ -196,6 +196,7 @@ function L:GetKnownForMap(mapID)
         for k, v in pairs(seed) do
             local c = {}
             for kk, vv in pairs(v) do c[kk] = vv end
+            c.seed = true   -- shipped, not seen by you (the tooltip says so)
             merged[k] = c
         end
     end
@@ -208,6 +209,7 @@ function L:GetKnownForMap(mapID)
                 -- completion refs (criteria/achievement/questID) so a pin can
                 -- still be marked done after we've seen it live.
                 base.x, base.y     = lv.x, lv.y
+                base.seed          = nil   -- you've seen it yourself now
                 base.name          = lv.name or base.name
                 base.kind          = lv.kind or base.kind
                 base.vignetteID    = lv.vignetteID or base.vignetteID

@@ -137,6 +137,9 @@ function VoidSweepPinMixin:OnMouseEnter()
         GameTooltip:AddLine("Killed before · not up right now", 0.6, 0.6, 0.6)
     elseif VS:IsDone(e) then
         GameTooltip:AddLine("Completed", 0.6, 0.6, 0.6)
+    elseif e.seed then
+        -- shipped with VoidSweep (Seed.lua), nobody's sighting of yours
+        GameTooltip:AddLine("Known spawn spot · not up right now", 0.85, 0.8, 0.4)
     else
         GameTooltip:AddLine("Seen here before · not up right now", 0.85, 0.8, 0.4)
     end

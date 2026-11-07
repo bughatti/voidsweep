@@ -54,6 +54,7 @@ end
 --   net:Pick(k)                  up to k random other members
 --   net:Noted(name)              call right before whispering name (hides the offline line)
 --   net:Sent(name, result)       call right after, with SendAddonMessage's return value
+-- Net.New(channel, onRoster, store): store = a SavedVariables table for offline marks
 ----------------------------------------------------------------------
 local Obj = {}
 Obj.__index = Obj
@@ -82,13 +83,27 @@ function Obj:ReadRoster()
         -- so everyone can be picked (not just the first ROSTER_MAX)
         local total = count or 0
         local start = total > ROSTER_MAX and math.random(0, total - ROSTER_MAX) or 0
+        local resolved = 0   -- rows that came back with a name (you included)
         for r = start + 1, start + math.min(total, ROSTER_MAX) do
             local ok, name = pcall(C_ChatInfo.GetChannelRosterInfo, i, r)
             name = ok and Net.Canon(name)
+            if name then resolved = resolved + 1 end
             if name and name ~= me then list[#list + 1] = name end
         end
         -- an empty read while others are in the channel = not arrived yet: keep the old list
-        if #list > 0 or (count or 0) <= 1 then self.roster = list end
+        if #list > 0 or (count or 0) <= 1 then
+            self.roster = list
+            -- the whole list was read: forget offline marks of players no longer on it
+            -- (they're saved across reloads, so this keeps the saved table small). Only
+            -- when every row had a name: a name still loading isn't "gone" (Sol review)
+            if total <= ROSTER_MAX and resolved == total then
+                local on = {}
+                for _, n in ipairs(list) do on[n:lower()] = true end
+                for k in pairs(self.unreach) do
+                    if not on[k] then self.unreach[k] = nil end
+                end
+            end
+        end
     end
     if self.onRoster then self.onRoster() end
 end
@@ -143,6 +158,9 @@ end
 -- a timed-out mark made logged-off players count as online again every 30 min, so the
 -- players box popped up and down (live 11-07). After UNREACH_FOR, X may be picked again,
 -- which is how we find out they're back.
+-- Marks are SAVED (the addon passes its SavedVariables table to Net.New) and timed with
+-- time(), not GetTime(): kept only in memory, every /reload counted logged-off members
+-- as online again until their next bounce (5 -> 2 within a minute, live 11-07).
 local UNREACH_FOR = 1800   -- a marked player may be whispered again after this
 local BOUNCE_WAIT = 5      -- the "No player named" line comes back well within this
 local STALE_MARK  = 7200   -- busy channel only: marks older than this stop being counted
@@ -152,7 +170,7 @@ function Obj:Marked(name) return self.unreach[name:lower()] ~= nil end
 -- may be whispered: not marked, or marked long enough ago to try again
 function Obj:Reachable(name)
     local t = self.unreach[name:lower()]
-    return not t or GetTime() - t >= UNREACH_FOR
+    return not t or time() - t >= UNREACH_FOR
 end
 
 -- Other members online (nil = unknown), less the ones known to be offline.
@@ -161,7 +179,7 @@ function Obj:Others()
     local gone = 0
     if self.count > ROSTER_MAX then
         -- only a window of the list is read: count the recent marks
-        local now = GetTime()
+        local now = time()
         for _, t in pairs(self.unreach) do
             if now - t < STALE_MARK then gone = gone + 1 end
         end
@@ -196,7 +214,7 @@ end
 local SEND_OK, SEND_OFFLINE = 0, 12
 function Obj:Sent(name, result)
     if type(name) ~= "string" then return end
-    local key, at = name:lower(), GetTime()
+    local key, at = name:lower(), time()
     if result == SEND_OFFLINE then
         self.unreach[key] = at
         if self.onRoster then self.onRoster() end
@@ -233,9 +251,11 @@ end
 -- Hide that line in chat (it's our hidden whisper, not something the player sent).
 function Obj:HidesNotice(text) return self:NoticeName(text) ~= nil end
 
-function Net.New(channel, onRoster)
+-- store: the addon's saved table for offline marks (kept across reloads); optional.
+function Net.New(channel, onRoster, store)
     local o = setmetatable({ channel = channel, onRoster = onRoster, roster = {}, count = nil,
-                             rosterAt = -ROSTER_EVERY, whispered = {}, unreach = {} }, Obj)
+                             rosterAt = -ROSTER_EVERY, whispered = {},
+                             unreach = type(store) == "table" and store or {} }, Obj)
     local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
     if addFilter then
         addFilter("CHAT_MSG_SYSTEM", function(_, _, text) return o:HidesNotice(text) end)
@@ -249,7 +269,7 @@ function Net.New(channel, onRoster)
         else
             local name = o:NoticeName(a1)   -- our whisper bounced: unreachable for a while
             if name then
-                o.unreach[name] = GetTime()
+                o.unreach[name] = time()
                 if o.onRoster then o.onRoster() end   -- the count drops
             end
         end

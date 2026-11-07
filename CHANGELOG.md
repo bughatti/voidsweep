@@ -1,5 +1,13 @@
 # VoidSweep Changelog
 
+## 0.2.15
+
+- **WoW Forever: every Classic rare on your map.** Over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) now have a pin where they spawn, one per rare, with directions on click. The Classic world shows no live markers for rares, so these pins show where to look; they don't light up when the rare is up. Data from NorgannonDB, see Credits.
+- **The starter map is refreshed** with more Midnight rares, treasures, world bosses and lore spots. From now on it can also take in spots two or more players have shared (never single reports).
+- **Starter-map pins say so.** Hover one you haven't seen yourself and it reads "Known spawn spot" instead of "Seen here before".
+- **WoW Forever: the players box is right after a /reload.** Players who logged off stay on the sharing channel's list; VoidSweep already left them out once a message to them bounced, but forgot that on every reload, so the count jumped up for a minute. It now remembers.
+- **Licence: VoidSweep is now GPL-3.0** (was MIT), because it includes NorgannonDB's data. See Credits in the README.
+
 ## 0.2.14
 
 - **WoW Forever: the players box shows the right count.** VoidGather, VoidQuest and VoidSweep each read their own sharing channel's member list, but the game hands out only one list at a time, so they took it from each other. A count could stick, and VoidSweep could lose its list of players to send rare alerts to. They now take turns.
