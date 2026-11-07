@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.13
+
+- **Fixed: sharing errors during encounters.** While the game's chat lockdown is on (boss fights), system messages are hidden from addons; VoidSweep read one and errored. It now skips them.
+- **Fixed: "VoidSweep tried to call a protected function".** It joined its sharing channel again even when already in it, which the game blocks in combat. It now joins only when it isn't in the channel, and waits until combat or the lockdown is over.
+
 ## 0.2.12
 
 - **WoW Forever: offline players no longer counted or messaged.** Forever's sharing channel still lists players who have logged off. When one of them can't be reached, VoidSweep now leaves them out for 30 minutes, so the players box shows who's really online and rare alerts go to players who can get them.

@@ -72,8 +72,37 @@ end
 -- Join the shared VoidSweep channel and keep it out of the visible chat tabs.
 -- Every client joins the SAME channel, so a broadcast reaches all of them
 -- (realm-cluster-wide). Reports are filtered to your current zone on display.
+-- Joining is blocked in combat and during the chat lockdown (encounters): ADDON_ACTION_BLOCKED
+-- x6 on 2026-11-06, and it was called again even when already in the channel. Join only
+-- when not in it, and when it's blocked try again once combat / the lockdown is over.
+local function chatLocked()
+    if InCombatLockdown() then return true end
+    local f = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    if not f then return false end
+    local ok, v = pcall(f)
+    if not ok then return true end
+    if issecretvalue and issecretvalue(v) then return true end
+    return v == true
+end
+local joinRetry = CreateFrame("Frame")
+joinRetry:SetScript("OnEvent", function(self)
+    if chatLocked() then return end
+    self:UnregisterAllEvents()
+    Sync:JoinNet()
+end)
+
 function Sync:JoinNet()
-    JoinTemporaryChannel(CHANNEL_NAME)
+    if not netIndex() then
+        if chatLocked() then
+            joinRetry:RegisterEvent("PLAYER_REGEN_ENABLED")
+            joinRetry:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+            joinRetry:RegisterEvent("ENCOUNTER_END")
+            -- fires when a chat / addon restriction lifts (PvP match end, ...): Codex review
+            pcall(joinRetry.RegisterEvent, joinRetry, "ADDON_RESTRICTION_STATE_CHANGED")
+            return
+        end
+        JoinTemporaryChannel(CHANNEL_NAME)
+    end
     if netIndex() then
         for i = 1, (NUM_CHAT_WINDOWS or 10) do
             local cf = _G["ChatFrame" .. i]

@@ -157,7 +157,8 @@ end
 -- "No player named X is currently playing." for a name we whispered in the last HIDE_FOR
 -- seconds: returns that name (lowercased), else nil.
 function Obj:NoticeName(text)
-    if type(text) ~= "string" or not ERR_CHAT_PLAYER_NOT_FOUND_S then return nil end
+    -- system lines can arrive as secret text (12.x): never index those
+    if type(text) ~= "string" or (issecretvalue and issecretvalue(text)) or not ERR_CHAT_PLAYER_NOT_FOUND_S then return nil end
     local now, lower = GetTime(), text:lower()
     for name, t in pairs(self.whispered) do
         if now - t > HIDE_FOR then
