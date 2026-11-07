@@ -36,7 +36,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ### WoW Forever
 - **Every Classic rare on your map** — over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) with a pin where they spawn, one pin per rare. Click for directions.
-- The Classic world shows no live markers for rares, so on Forever their pins don't light up when one is up; they show where to look.
+- **Rares light up when seen:** the Classic world has no live rare markers, so VoidSweep watches nameplates, your target and your mouseover. A rare you see gets the bright ring for 5 minutes ("UP · seen 1 min ago"), and a kill is remembered for 2 hours ("Killed 12 min ago") so you can guess when it's back. Sightings are shared with other VoidSweep players.
 
 ---
 

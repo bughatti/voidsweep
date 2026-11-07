@@ -63,9 +63,14 @@ function VoidSweepPinMixin:OnAcquired(entry, x, y, isLive)
     self:SetPosition(x, y)
     applyDot(self.icon, entry)
     -- color = category (set above); alpha/size = state.
-    local up = entry.reported or isLive   -- UP right now: seen live or reported
+    local sight = entry.sight                     -- seen on a nameplate / target lately (Sightings.lua)
+    local up = entry.reported or isLive or (sight and sight.up)   -- UP right now: seen live or reported
     if entry.reported then
         self:SetAlpha(0.95); self:SetSize(15, 15)   -- crowd-reported
+    elseif sight and sight.up then
+        self:SetAlpha(1.0);  self:SetSize(14, 14)   -- seen up (by you or another player)
+    elseif sight and sight.dead then
+        self:SetAlpha(0.3);  self:SetSize(11, 11)   -- killed lately
     elseif isLive then
         self:SetAlpha(1.0);  self:SetSize(14, 14)   -- up, you're near it
     elseif entry.confirmed then                      -- confirmed delve spawn spot: solid dark green
@@ -125,6 +130,15 @@ function VoidSweepPinMixin:OnMouseEnter()
             GameTooltip:AddLine(("UP  ·  %d%% HP"):format(math.floor(hp * 100 + 0.5)), 0.3, 1, 0.3)
         else
             GameTooltip:AddLine("UP", 0.3, 1, 0.3)
+        end
+    elseif e.sight then
+        local ago = SecondsToTime(math.max(60, e.sight.age or 0), true)
+        local by = e.sight.by and (" by " .. e.sight.by) or ""
+        if e.sight.up then
+            GameTooltip:AddLine(("UP · seen %s ago%s"):format(ago, by), 0.3, 1, 0.3)
+        else
+            GameTooltip:AddLine(("Killed %s ago%s"):format(ago, by), 1, 0.45, 0.45)
+            GameTooltip:AddLine("Rares come back after a while: check again later.", 0.6, 0.6, 0.6)
         end
     elseif e.shared then
         local who = (e.c or 1) >= 2 and ("%d players"):format(e.c) or (e.f or "another player")

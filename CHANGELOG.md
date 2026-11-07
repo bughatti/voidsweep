@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.16
+
+- **WoW Forever: rare pins light up.** The Classic world has no rare markers, so VoidSweep now sees a rare the way you do: its nameplate shows up, you target it or point at it. Its pin gets the white "up" ring for 5 minutes ("UP · seen 1 min ago"), and a kill is remembered for 2 hours ("Killed 12 min ago"), so you can tell when it might be back.
+- **Shared with other VoidSweep players:** when someone sees a rare up, you get "Rathorian is up (seen by ...)" in chat and the pin lights up on your map too. Only rares VoidSweep knows, near their spot, are accepted.
+
 ## 0.2.15
 
 - **WoW Forever: every Classic rare on your map.** Over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) now have a pin where they spawn, one per rare, with directions on click. The Classic world shows no live markers for rares, so these pins show where to look; they don't light up when the rare is up. Data from NorgannonDB, see Credits.

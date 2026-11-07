@@ -232,6 +232,20 @@ function L:GetKnownForMap(mapID)
             end
         end
     end
+    -- rares seen up / killed lately (Sightings.lua); tagged on a copy, never on saved records
+    if VS.Sightings then
+        for k, v in pairs(merged) do
+            local s = VS.Sightings:Get(mapID, k)
+            if s then
+                if not (v.seed or v.shared) then
+                    local c = {}
+                    for kk, vv in pairs(v) do c[kk] = vv end
+                    merged[k], v = c, c
+                end
+                v.sight = s
+            end
+        end
+    end
     return merged
 end
 

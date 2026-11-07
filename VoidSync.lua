@@ -140,6 +140,18 @@ function Sync:Broadcast(entry, x, y, hp)
     if ci then C_ChatInfo.SendAddonMessage(PREFIX, payload, "CHANNEL", ci) end
 end
 
+-- A rare seen on a nameplate / target (Sightings.lua): same transport as Broadcast.
+function Sync:SendSighting(payload)
+    if not (enabled() and payload) or #payload > 250 then return end
+    if net then
+        Sync.SendTo(payload, Sync.Targets(FANOUT), true)
+        return
+    end
+    if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) or chatLocked() then return end
+    local ci = netIndex()
+    if ci then C_ChatInfo.SendAddonMessage(PREFIX, payload, "CHANNEL", ci) end
+end
+
 ----------------------------------------------------------------------
 -- Receive — untrusted. Validate hard before it ever becomes a pin.
 ----------------------------------------------------------------------
@@ -165,6 +177,11 @@ end
 
 function Sync:OnMessage(payload, sender)
     if not enabled() or type(payload) ~= "string" then return end
+    local sn = payload:match("^SN:1:(.+)$")   -- a sighting (Sightings.lua validates it)
+    if sn then
+        if rateOK(sender) and VS.Sightings then VS.Sightings:OnShared(sn, sender) end
+        return
+    end
     local proto, body = payload:match("^UP:(%d+):(.+)$")
     if proto ~= PROTO then return end
 

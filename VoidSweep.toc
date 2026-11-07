@@ -2,7 +2,7 @@
 ## Title: |cff00c7ffVoidSweep|r
 ## Notes: Live map radar for Midnight: rares, world bosses, treasures and lore that are up right now. Click a pin for directions.
 ## Author: Vede
-## Version: 0.2.15
+## Version: 0.2.16
 ## SavedVariables: VoidSweepDB, VoidPresenceDB
 ## SavedVariablesPerCharacter: VoidSweepCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Map_01
@@ -17,6 +17,7 @@ Poi.lua
 PresenceBox.lua
 WhisperNet.lua
 VoidSync.lua
+Sightings.lua
 Route.lua
 Waypoint.lua
 Pins.lua
