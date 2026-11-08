@@ -303,6 +303,38 @@ local function cleanName(s)
     return s ~= "" and s or nil
 end
 
+-- Traffic counter (the user, 2026-11-08: nothing had ever arrived and nothing told us
+-- why). By message type (UP/SN/Q/B/L/P/H/...): what went out, what the game refused
+-- (offline), what came in, and what never went because nobody was online, since `since`,
+-- in VoidSweepDB.netStats. /vsw net prints it.
+-- Kept small on purpose (incoming messages are counted before they're checked): the type
+-- is the message's short uppercase prefix, a short label we pass ourselves, else "other",
+-- and each bucket holds at most TALLY_KEYS types (the rest count as "other").
+local TALLY_KEYS = 16
+local function tally(what, msg)
+    if not VoidSweepDB then return end
+    local s = VoidSweepDB.netStats
+    if not s then s = { since = time() }; VoidSweepDB.netStats = s end
+    local kind = type(msg) == "string" and (msg:match("^(%u%u?%u?%u?):") or (#msg <= 12 and not msg:find(":") and msg))
+    kind = kind or "other"
+    local b = s[what]
+    if not b then b = {}; s[what] = b end
+    if not b[kind] then
+        local n = 0
+        for _ in pairs(b) do n = n + 1 end
+        if n >= TALLY_KEYS then kind = "other" end
+    end
+    b[kind] = (b[kind] or 0) + 1
+    s["last_" .. what] = time()
+end
+-- SendAddonMessage's result: accepted (0; older clients nil/true), the player is offline
+-- (12 = TargetOffline), or refused for another reason (throttle, lockdown, ...)
+local function sendResult(result)
+    if result == nil or result == true or result == 0 then return "sent" end
+    return result == 12 and "offline" or "refused"
+end
+Sync.Tally = tally
+
 -- An item with .to is an addon whisper (Forever), without one it goes on the
 -- channel (retail).
 local function pump()
@@ -316,10 +348,11 @@ local function pump()
     if item.to then
         if net then net:Noted(item.to) end
         local result = C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "WHISPER", item.to)
+        tally(sendResult(result), item.msg)
         if net then net:Sent(item.to, result) end
     else
         local ci = netIndex()
-        if ci then C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "CHANNEL", ci) end
+        if ci then tally(sendResult(C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "CHANNEL", ci)), item.msg) end
     end
 end
 
@@ -350,6 +383,7 @@ end
 -- One message to every target (to = nil: once, on the channel).
 function Sync.SendTo(msg, to, urgent)
     if not to then send(msg, urgent); return end
+    if #to == 0 then tally("nobody", msg); return end   -- Forever: nobody else online
     for _, name in ipairs(to) do send(msg, urgent, name) end
 end
 
@@ -382,6 +416,7 @@ local function sendSpots(tag, mapID, recs, to)
         for _, m in ipairs(msgs) do send(m) end
         return
     end
+    if #to == 0 and #msgs > 0 then tally("nobody", msgs[1]) end   -- Forever: nobody else online
     for _, name in ipairs(to) do
         for _, m in ipairs(msgs) do send(m, false, name) end
     end
@@ -400,9 +435,11 @@ local function askHere()
     if lastQuery[mapID] and GetTime() - lastQuery[mapID] < QUERY_CD then return end
     if net then
         net:RequestRoster()
-        if #net.roster == 0 then return end   -- nobody to ask yet; try again on the next zone change
+        -- nobody to ask yet (none online, or all known to be offline): try again on the next zone change
+        local targets = net:Pick(ASK_PEERS)
+        if #targets == 0 then tally("nobody", "Q"); return end
         lastQuery[mapID] = GetTime()
-        for _, to in ipairs(net:Pick(ASK_PEERS)) do send(("Q:%s:%d"):format(SPOT_PROTO, mapID), false, to) end
+        for _, to in ipairs(targets) do send(("Q:%s:%d"):format(SPOT_PROTO, mapID), false, to) end
         return
     end
     lastQuery[mapID] = GetTime()
@@ -819,6 +856,7 @@ function Sync:Init()
             return
         end
         if who ~= me then
+            tally("got", msg)
             if not net or Sync.heard[who] or Sync.heardPeople < HEARD_MAX then   -- cap: Forever only
                 if not Sync.heard[who] then Sync.heardPeople = Sync.heardPeople + 1 end
                 Sync.heard[who] = (Sync.heard[who] or 0) + 1
@@ -848,7 +886,25 @@ local function channelMembers()
     end
 end
 
+-- the traffic counter since it started (all sessions), on every /vsw net
+local function printTraffic()
+    local s = VoidSweepDB and VoidSweepDB.netStats
+    if not s then
+        print("|cff00c7ffVoidSweep|r: traffic -- nothing sent or received yet since the counter started.")
+        return
+    end
+    local function list(t)
+        local out = {}
+        for k, v in pairs(t or {}) do out[#out + 1] = k .. " " .. v end
+        table.sort(out)
+        return #out > 0 and table.concat(out, ", ") or "none"
+    end
+    print(("|cff00c7ffVoidSweep|r: traffic since %s -- sent: %s | received: %s | not sent, nobody online: %s | offline: %s | refused: %s"):format(
+        date("%b %d %H:%M", s.since), list(s.sent), list(s.got), list(s.nobody), list(s.offline), list(s.refused)))
+end
+
 function Sync:NetStats(done)
+    printTraffic()
     if net then
         net:RequestRoster(true)
         C_Timer.After(3.5, function()

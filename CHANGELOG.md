@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.17
+
+- **See what sharing is doing.** `/vsw net` now starts with the sharing traffic since the counter started: what was sent to and received from other VoidSweep players, and how often nothing went out because nobody else was online.
+
 ## 0.2.16
 
 - **WoW Forever: rare pins light up.** The Classic world has no rare markers, so VoidSweep now sees a rare the way you do: its nameplate shows up, you target it or point at it. Its pin gets the white "up" ring for 5 minutes ("UP · seen 1 min ago"), and a kill is remembered for 2 hours ("Killed 12 min ago"), so you can tell when it might be back.
