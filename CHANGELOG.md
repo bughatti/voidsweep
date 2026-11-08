@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.18
+
+- **WoW Forever: sharing moved to a new password-protected channel, a fresh one every day.** The old channel was open: anyone could join it by hand, become its owner and ban players, which silently stops their sharing (it happened to VoidQuest's channel). Now every VoidSweep player joins that day's channel with its password, and at 00:00 UTC everyone moves to the next one together, so even if someone gets in, it only lasts until the next day. Players on older versions aren't counted until they update. Retail is unchanged.
+- **"blocked" in the players box** when the game won't let you into the sharing channel, and `/vsw net` says why.
+
 ## 0.2.17
 
 - **See what sharing is doing.** `/vsw net` now starts with the sharing traffic since the counter started: what was sent to and received from other VoidSweep players, and how often nothing went out because nobody else was online.

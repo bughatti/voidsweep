@@ -59,6 +59,12 @@ end
 local Obj = {}
 Obj.__index = Obj
 
+-- A new day's channel: forget the old member list (offline marks stay, they're per player).
+function Obj:SetChannel(channel)
+    self.channel = channel
+    self.count, self.roster, self.rosterAt = nil, {}, -ROSTER_EVERY
+end
+
 function Obj:DisplayIndex()
     if not (GetNumDisplayChannels and GetChannelDisplayInfo) then return nil end
     local want = self.channel:lower()
@@ -252,6 +258,94 @@ end
 function Obj:HidesNotice(text) return self:NoticeName(text) ~= nil end
 
 -- store: the addon's saved table for offline marks (kept across reloads); optional.
+----------------------------------------------------------------------
+-- Refused channels (live Forever, 2026-11-08). Anyone can /join an open channel, own it
+-- once it empties and /ban players. A banned player's join is answered
+-- CHAT_MSG_CHANNEL_NOTICE NOT_ALLOWED_IN_CHANNEL (with no channel name), and the game
+-- then lists the channel as joined but DISABLED (GetChannelList), with no member list and
+-- no way to leave it until you log out. That hit VoidQuestNet. So on Forever the addons
+-- moved to new channels that they join with a password, and these tell a refused channel
+-- apart from one that just isn't read yet:
+--   Net.Blocked(channel)   true while the game lists it disabled (banned)
+--   Net.Refused(channel)   "WRONG_PASSWORD" / "BANNED" if the last join got that answer
+----------------------------------------------------------------------
+----------------------------------------------------------------------
+-- Daily channel (Forever, 2026-11-08). Every player of an addon works out the same channel
+-- name and password from the server's UTC day, so everyone moves to a new channel together
+-- at 00:00 UTC: a ban, or someone who took over the channel, lasts one day at most. Both
+-- are built from numbers when the addon runs, so neither is written in the files as text.
+--   name, pw, day = Net.DailyChannel(tag, salt)   tag = short letters, salt = the addon's number
+----------------------------------------------------------------------
+local CODE = "bcdfghjkmnpqrstvwxz23456789"   -- no vowels: no accidental words for the name filter
+local function mix(h, n) return (h * 31 + n) % 2147483629 end
+local function code(seed, len)
+    local h, out = seed, {}
+    for i = 1, len do
+        h = mix(mix(h, i), 7919)
+        local k = h % #CODE + 1
+        out[i] = CODE:sub(k, k)
+    end
+    return table.concat(out)
+end
+
+function Net.Day()
+    return math.floor(((GetServerTime and GetServerTime()) or time()) / 86400)
+end
+
+function Net.DailyChannel(tag, salt, day)
+    day = day or Net.Day()
+    local s = mix(mix(salt, day), salt % 97)
+    return tag .. code(s, 6), code(mix(s, 104729), 8), day
+end
+
+function Net.Blocked(channel)
+    if not (GetChannelList and type(channel) == "string") then return false end
+    local t, want = { GetChannelList() }, channel:lower()
+    for i = 1, #t - 2, 3 do   -- id, name, disabled
+        local name = t[i + 1]
+        if type(name) == "string" and name:lower() == want then return t[i + 2] == true end
+    end
+    return false
+end
+
+local refused = {}   -- [lower(channel)] = notice
+local REFUSALS = { WRONG_PASSWORD = true, BANNED = true }
+local noticeFrame = CreateFrame("Frame")
+noticeFrame:RegisterEvent("CHAT_MSG_CHANNEL_NOTICE")
+noticeFrame:SetScript("OnEvent", function(_, _, notice, _, _, full, _, _, _, _, base)
+    if type(notice) ~= "string" or (issecretvalue and (issecretvalue(notice) or issecretvalue(full) or issecretvalue(base))) then return end
+    local name = type(base) == "string" and base ~= "" and base
+        or type(full) == "string" and full:match("^%d+%.%s*(.+)$") or full
+    if type(name) ~= "string" or name == "" then return end
+    if REFUSALS[notice] then
+        refused[name:lower()] = notice
+    elseif notice == "YOU_JOINED" or notice == "YOU_CHANGED" then
+        refused[name:lower()] = nil
+    end
+end)
+
+function Net.Refused(channel)
+    return type(channel) == "string" and refused[channel:lower()] or nil
+end
+
+-- "blocked" for the players box while the game won't let us into the channel, else nil.
+function Net.BlockNote(channel)
+    if Net.Blocked(channel) or Net.Refused(channel) then return "blocked" end
+end
+
+-- One line saying why, for the addon's /net command (nil when nothing is wrong).
+function Net.BlockReason(channel)
+    if Net.Blocked(channel) then
+        return ("the game won't let you into %s (its owner banned this character). Sharing can't count or reach players until that's lifted."):format(channel)
+    end
+    local r = Net.Refused(channel)
+    if r == "WRONG_PASSWORD" then
+        return ("%s has a different password (someone else set it). Sharing can't count or reach players there."):format(channel)
+    elseif r == "BANNED" then
+        return ("the game won't let you into %s (banned by its owner)."):format(channel)
+    end
+end
+
 function Net.New(channel, onRoster, store)
     local o = setmetatable({ channel = channel, onRoster = onRoster, roster = {}, count = nil,
                              rosterAt = -ROSTER_EVERY, whispered = {},
