@@ -1,5 +1,11 @@
 # VoidSweep Changelog
 
+## 0.2.19
+
+- **WoW Forever: rares know their layer.** Forever splits each zone into layers, and a rare that's up on someone else's layer isn't there for you. VoidSweep now works out your layer from the NPCs around you, and every rare sighting carries the layer it was seen on. Shared sightings say **your layer** or **another layer, not up for you**, in chat and on the map pin, so you stop riding to rares you can't see. A kill on another layer no longer marks the rare dead on yours.
+- **Your layer** shows on the VoidSweep map button's tooltip and with `/vsw layer`.
+- Players on 0.2.18 don't see sightings from players who know their layer until they update.
+
 ## 0.2.18
 
 - **WoW Forever: sharing moved to a new password-protected channel, a fresh one every day.** The old channel was open: anyone could join it by hand, become its owner and ban players, which silently stops their sharing (it happened to VoidQuest's channel). Now every VoidSweep player joins that day's channel with its password, and at 00:00 UTC everyone moves to the next one together, so even if someone gets in, it only lasts until the next day. Players on older versions aren't counted until they update. Retail is unchanged.

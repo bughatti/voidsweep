@@ -137,6 +137,11 @@ function VS.MapButton:Init()
         GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
         GameTooltip:SetText("VoidSweep — filters")
         GameTooltip:AddLine("Toggle what shows on the map.", 0.8, 0.8, 0.8)
+        -- WoW Forever: your layer (Layer.lua)
+        if VS.Layer and RegionalUniqueNamesEnabled and RegionalUniqueNamesEnabled() then
+            local pair = VS.Layer:Here()
+            GameTooltip:AddLine(pair and ("Your layer: |cffffd200" .. pair .. "|r") or "Your layer: not known yet (point at any NPC)", 0.8, 0.8, 0.8)
+        end
         GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)

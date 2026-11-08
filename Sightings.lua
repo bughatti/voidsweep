@@ -10,6 +10,10 @@
 -- Each sighting goes to other VoidSweep players (the same paced whispers / channel
 -- as rare alerts): SN:1:mapID,x,y,u|d,name. Only rares from the starter map are
 -- accepted, near their spot, so nobody can paint fake pins.
+-- WoW Forever layers (Layer.lua, 2026-11-08): a sighting carries the layer it was seen
+-- on, SN:2:mapID,x,y,u|d,<server-shard>,name, and says whether that's YOUR layer: a
+-- rare up on another layer isn't there for you. SN:1 (no layer) is still read, and
+-- still sent while your layer isn't known yet.
 -- Works on retail too (vignettes already light those pins; this only adds kills).
 ----------------------------------------------------------------------
 local ADDON, VS = ...
@@ -78,10 +82,31 @@ local function match(name, mapID, x, y)
     return best, bestD and math.sqrt(bestD)
 end
 
-local function store(e, dead, who)
+-- The layer a rare's zone is on for you right now (nil = not known).
+local function myLayer(mapID)
+    local L = VS.Layer
+    return L and L:Current(L:Zone(mapID)) or nil
+end
+
+-- "same" / "other" / nil: was this sighting on your layer?
+function S:LayerMatch(mapID, layer)
+    local L = VS.Layer
+    if not (L and layer) then return nil end
+    return L:Compare(layer, L:Zone(mapID))
+end
+
+-- A few words for chat lines and tooltips ("" while unknown).
+function S:LayerText(mapID, layer)
+    local m = self:LayerMatch(mapID, layer)
+    if m == "same" then return "|cff33ff33your layer|r" end
+    if m == "other" then return "|cffff9933another layer (" .. layer .. "), not up for you|r" end
+    return ""
+end
+
+local function store(e, dead, who, layer)
     local db = DB()
     db[e.mapID] = db[e.mapID] or {}
-    db[e.mapID][e.key] = { t = time(), dead = dead or nil, by = who }
+    db[e.mapID][e.key] = { t = time(), dead = dead or nil, by = who, layer = layer }
     if VS.Pins and VS.Pins.Refresh then
         VS.Pins:Refresh()
         if not dead then C_Timer.After(UP_TTL + 1, function() VS.Pins:Refresh() end) end   -- the ring goes away
@@ -95,16 +120,19 @@ function S:Get(mapID, key)
     if not s then return nil end
     local age = time() - (s.t or 0)
     if age > KEEP or (not s.dead and age > UP_TTL) then return nil end
-    return { t = s.t, dead = s.dead, by = s.by, age = age, up = not s.dead }
+    return { t = s.t, dead = s.dead, by = s.by, age = age, up = not s.dead, layer = s.layer, mapID = mapID }
 end
 
-local function share(e, name, dead)
+local function share(e, name, dead, layer)
     local k = name .. (dead and "d" or "u")
     if lastSent[k] and GetTime() - lastSent[k] < RESEND then return end
     lastSent[k] = GetTime()
-    if VS.Sync and VS.Sync.SendSighting then
-        VS.Sync:SendSighting(("SN:1:%d,%d,%d,%s,%s"):format(e.mapID,
-            math.floor(e.x * 1000), math.floor(e.y * 1000), dead and "d" or "u", name))
+    if not (VS.Sync and VS.Sync.SendSighting) then return end
+    local x, y, st = math.floor(e.x * 1000), math.floor(e.y * 1000), dead and "d" or "u"
+    if layer then
+        VS.Sync:SendSighting(("SN:2:%d,%d,%d,%s,%s,%s"):format(e.mapID, x, y, st, layer, name))
+    else
+        VS.Sync:SendSighting(("SN:1:%d,%d,%d,%s,%s"):format(e.mapID, x, y, st, name))
     end
 end
 
@@ -122,13 +150,21 @@ local function check(unit)
     local dead = UnitIsDead(unit) and true or false
     local cur = S:Get(e.mapID, e.key)
     if cur and cur.dead == (dead or nil) and cur.by == nil and cur.age < 30 then return end
-    store(e, dead, nil)
-    share(e, name, dead)
+    local layer = myLayer(e.mapID)   -- you see it, so it's on your layer
+    store(e, dead, nil, layer)
+    share(e, name, dead, layer)
 end
 
 -- From another player (VoidSync). Untrusted: a rare of ours, near its spot.
-function S:OnShared(body, sender)
-    local mapID, x1k, y1k, st, name = body:match("^(%d+),(%d+),(%d+),([ud]),(.+)$")
+-- version 1 = no layer, 2 = with the layer it was seen on.
+function S:OnShared(body, sender, version)
+    local mapID, x1k, y1k, st, layer, name
+    if version == 2 then
+        mapID, x1k, y1k, st, layer, name = body:match("^(%d+),(%d+),(%d+),([ud]),(%d+%-%d+),(.+)$")
+    else
+        mapID, x1k, y1k, st, name = body:match("^(%d+),(%d+),(%d+),([ud]),(.+)$")
+    end
+    if layer and #layer > 20 then return end
     mapID, x1k, y1k = tonumber(mapID), tonumber(x1k), tonumber(y1k)
     if not (mapID and x1k and y1k and name) or #name > 40 then return end
     local key = "n" .. name
@@ -140,12 +176,17 @@ function S:OnShared(body, sender)
     if cur and cur.by == nil and cur.age < UP_TTL then return end   -- your own sighting is fresher
     -- the same news again (repeats, or several players at once): no new chat line, no
     -- refresh of the timer, so nobody can keep a pin lit by replaying one report
-    if cur and cur.dead == (dead or nil) and cur.age < RESEND then return end
-    store({ mapID = mapID, key = key }, dead, sender or "another player")
+    -- (same layer only: news from your layer always gets through after another layer's, Codex)
+    if cur and cur.dead == (dead or nil) and cur.layer == layer and cur.age < RESEND then return end
+    -- news from another layer never replaces fresh news from yours (a kill over there
+    -- doesn't mean it's dead here)
+    if cur and S:LayerMatch(mapID, cur.layer) == "same" and S:LayerMatch(mapID, layer) == "other" then return end
+    store({ mapID = mapID, key = key }, dead, sender or "another player", layer)
     if not dead then
         local zone = C_Map.GetMapInfo(mapID)
-        DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is up|r (seen by %s%s)."):format(
-            name, sender or "another player", zone and (", " .. zone.name) or ""))
+        local lt = S:LayerText(mapID, layer)
+        DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is up|r (seen by %s%s)%s."):format(
+            name, sender or "another player", zone and (", " .. zone.name) or "", lt ~= "" and (" · " .. lt) or ""))
     end
 end
 

@@ -140,6 +140,9 @@ function VoidSweepPinMixin:OnMouseEnter()
             GameTooltip:AddLine(("Killed %s ago%s"):format(ago, by), 1, 0.45, 0.45)
             GameTooltip:AddLine("Rares come back after a while: check again later.", 0.6, 0.6, 0.6)
         end
+        -- WoW Forever: was that on your layer?
+        local lt = VS.Sightings.LayerText and VS.Sightings:LayerText(e.sight.mapID, e.sight.layer) or ""
+        if lt ~= "" then GameTooltip:AddLine(lt) end
     elseif e.shared then
         local who = (e.c or 1) >= 2 and ("%d players"):format(e.c) or (e.f or "another player")
         local ago = SecondsToTime(math.max(60, time() - (e.t or time())), true)

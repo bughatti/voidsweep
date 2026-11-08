@@ -212,13 +212,25 @@ SlashCmdList.VOIDSWEEP = function(msg)
             VoidPresence:IsShown() and "|cff33ff33on|r (drag it anywhere)" or "|cffff5555off|r"))
         return
     end
+    if msg == "layer" then   -- WoW Forever: which layer you're on (Layer.lua)
+        local pair, zone = VS.Layer:Here()
+        local info = zone and C_Map.GetMapInfo(zone)
+        if not (RegionalUniqueNamesEnabled and RegionalUniqueNamesEnabled()) then
+            print("|cff00c7ffVoidSweep|r: layers are a WoW Forever thing; nothing to show here.")
+        elseif pair then
+            print(("|cff00c7ffVoidSweep|r: you're on layer |cffffd200%s|r in %s."):format(pair, info and info.name or "this zone"))
+        else
+            print("|cff00c7ffVoidSweep|r: layer not known yet. Point at or target any NPC nearby and try again.")
+        end
+        return
+    end
     if msg == "net" or msg == "synctest" then
         VS.Sync:SelfTest()   -- single-client round-trip test; prints results in ~6s
         return
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()

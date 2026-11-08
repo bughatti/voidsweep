@@ -1,0 +1,125 @@
+----------------------------------------------------------------------
+-- Void Layer: which layer you're on (WoW Forever)
+--
+-- Forever has no layer API. Every NPC's GUID carries it (measured 2026-11-08 with
+-- VoidDev's LayerProbe): Creature-0-<server>-<map>-<shard>-<npcID>-<spawn>. The pair
+-- "<server>-<shard>" is the same for every NPC around you on one layer, and changes
+-- when a group invite moves you (7075-4 -> 7054-6) or you walk into another area
+-- (Barrens 6831-7, Orgrimmar 7073-10). Now and then a single NPC from another layer
+-- shows up (7073-9 among 6831-7), so the layer is the pair MOST nearby NPCs share.
+--
+--   ns.Layer:Current(zone)   pair for that zone ("6831-7"), or nil while unknown
+--   ns.Layer:Here()          pair, zone for where you stand
+--   ns.Layer:Compare(pair, zone)  "same" / "other" / nil (unknown either side)
+--   ns.Layer:Zone(mapID)     the zone a map rolls up to (caves, floors -> zone)
+--   ns.Layer:OnChange(fn)    fn(pair, zone) when your layer changes
+--
+-- Read from nameplates, your target and your mouseover; players and their pets,
+-- totems and summons are skipped. Readings reset when your group changes or you
+-- change zone, since either can move you. Nothing is saved or sent. Forever only.
+--
+-- Copied as-is into each addon that uses it (source of truth: wow-addons/_shared/Layer.lua).
+----------------------------------------------------------------------
+local _, ns = ...
+local L = {}
+ns.Layer = L
+
+local WINDOW  = 180   -- seconds a reading counts
+local MAX     = 60    -- readings kept
+local FRESH   = 600   -- a zone's layer is trusted this long after its last reading
+
+local function secret(v) return issecretvalue and issecretvalue(v) end
+local function active() return RegionalUniqueNamesEnabled ~= nil and RegionalUniqueNamesEnabled() == true end
+
+local readings = {}   -- { pair, zone, t }
+local known = {}      -- [zone] = { pair, t }
+local listeners = {}
+
+function L:Zone(mapID)
+    local info = mapID and C_Map.GetMapInfo(mapID)
+    local zoneType = Enum.UIMapType and Enum.UIMapType.Zone or 3
+    while info and info.mapType and info.mapType > zoneType and info.parentMapID and info.parentMapID > 0 do
+        mapID = info.parentMapID
+        info = C_Map.GetMapInfo(mapID)
+    end
+    return mapID
+end
+
+local function here() return L:Zone(C_Map.GetBestMapForUnit("player")) end
+
+local function recompute(zone)
+    local now, count, best, bestN = GetTime(), {}, nil, 0
+    for _, r in ipairs(readings) do
+        if r.zone == zone and now - r.t <= WINDOW then
+            local n = (count[r.pair] or 0) + 1
+            count[r.pair] = n
+            if n > bestN then best, bestN = r.pair, n end
+        end
+    end
+    if not best then return end
+    local old = known[zone] and known[zone].pair
+    known[zone] = { pair = best, t = now }
+    if best ~= old then
+        for _, fn in ipairs(listeners) do pcall(fn, best, zone) end
+    end
+end
+
+local function note(unit)
+    if not active() or not UnitExists(unit) then return end
+    if UnitPlayerControlled(unit) then return end   -- players, pets, totems, summons
+    local g = UnitGUID(unit)
+    if not g or secret(g) then return end
+    local kind, _, server, _, shard = strsplit("-", g)
+    if kind ~= "Creature" or not (server and shard) then return end
+    local zone = here()
+    if not zone then return end
+    -- one vote per NPC: pointing at the same odd one again doesn't outvote the rest (Codex)
+    for i = #readings, 1, -1 do
+        if readings[i].guid == g then table.remove(readings, i) end
+    end
+    table.insert(readings, { pair = server .. "-" .. shard, zone = zone, t = GetTime(), guid = g })
+    while #readings > MAX do table.remove(readings, 1) end
+    recompute(zone)
+end
+
+-- A group change or a new zone can move you: start over, answers included (Codex: a
+-- kept answer said the old layer for up to FRESH seconds after a hop).
+local function reset() wipe(readings); wipe(known) end
+
+function L:Current(zone)
+    local k = zone and known[zone]
+    if k and GetTime() - k.t <= FRESH then return k.pair end
+end
+
+function L:Here()
+    local zone = here()
+    return self:Current(zone), zone
+end
+
+function L:Compare(pair, zone)
+    if type(pair) ~= "string" or pair == "" or pair == "0" then return nil end
+    local mine = self:Current(zone)
+    if not mine then return nil end
+    return mine == pair and "same" or "other"
+end
+
+function L:OnChange(fn) listeners[#listeners + 1] = fn end
+
+local f = CreateFrame("Frame")
+for _, ev in ipairs({ "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT",
+                      "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
+    pcall(f.RegisterEvent, f, ev)
+end
+local lastGroup
+f:SetScript("OnEvent", function(_, ev, a1)
+    if ev == "NAME_PLATE_UNIT_ADDED" then pcall(note, a1)
+    elseif ev == "PLAYER_TARGET_CHANGED" then pcall(note, "target")
+    elseif ev == "UPDATE_MOUSEOVER_UNIT" then pcall(note, "mouseover")
+    elseif ev == "GROUP_ROSTER_UPDATE" then
+        local n = GetNumGroupMembers and GetNumGroupMembers() or 0
+        local inGroup = n > 0
+        if inGroup ~= lastGroup then lastGroup = inGroup; reset() end   -- joined or left, not every roster tick
+    else
+        reset()
+    end
+end)

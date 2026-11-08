@@ -194,9 +194,10 @@ end
 
 function Sync:OnMessage(payload, sender)
     if not enabled() or type(payload) ~= "string" then return end
-    local sn = payload:match("^SN:1:(.+)$")   -- a sighting (Sightings.lua validates it)
+    -- a sighting (Sightings.lua validates it); 2 = with the layer it was seen on
+    local snv, sn = payload:match("^SN:([12]):(.+)$")
     if sn then
-        if rateOK(sender) and VS.Sightings then VS.Sightings:OnShared(sn, sender) end
+        if rateOK(sender) and VS.Sightings then VS.Sightings:OnShared(sn, sender, tonumber(snv)) end
         return
     end
     local proto, body = payload:match("^UP:(%d+):(.+)$")
