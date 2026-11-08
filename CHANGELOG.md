@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.20
+
+- **WoW Forever: which layers other VoidSweep players are on.** `/vsw layers` asks the VoidSweep players in your zone and shows each layer with how many Void players are on it, for example "6833-20 (you + 1 Void player) · 6833-21: 2 Void players". The map button's tooltip shows the same. When a rare is reported up on another layer, VoidSweep asks quietly, so it already knows whether a Void player is over there (that's what the coming layer hop needs).
+- Only players in that zone answer, everyone else stays silent; a zone is asked about at most every 5 minutes, and only VoidSweep players in the sharing channel get an answer. Names are never shown or saved.
+
 ## 0.2.19
 
 - **WoW Forever: rares know their layer.** Forever splits each zone into layers, and a rare that's up on someone else's layer isn't there for you. VoidSweep now works out your layer from the NPCs around you, and every rare sighting carries the layer it was seen on. Shared sightings say **your layer** or **another layer, not up for you**, in chat and on the map pin, so you stop riding to rares you can't see. A kill on another layer no longer marks the rare dead on yours.

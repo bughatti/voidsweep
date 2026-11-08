@@ -187,6 +187,10 @@ function S:OnShared(body, sender, version)
         local lt = S:LayerText(mapID, layer)
         DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is up|r (seen by %s%s)%s."):format(
             name, sender or "another player", zone and (", " .. zone.name) or "", lt ~= "" and (" · " .. lt) or ""))
+        -- up on another layer: find out which Void players are on it (LayerNet, rate-limited)
+        if S:LayerMatch(mapID, layer) == "other" and VS.LayerNet and VS.Layer then
+            VS.LayerNet:Ask(VS.Layer:Zone(mapID))
+        end
     end
 end
 

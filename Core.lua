@@ -224,13 +224,17 @@ SlashCmdList.VOIDSWEEP = function(msg)
         end
         return
     end
+    if msg == "layers" then   -- WoW Forever: which layers other VoidSweep players are on here
+        VS.LayerNet:Report()
+        return
+    end
     if msg == "net" or msg == "synctest" then
         VS.Sync:SelfTest()   -- single-client round-trip test; prints results in ~6s
         return
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()

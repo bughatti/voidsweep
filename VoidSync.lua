@@ -398,6 +398,13 @@ function Sync.Targets(k)
     return net:Pick(k)
 end
 
+-- Forever: is this player in our sharing channel right now? (LayerNet answers only them)
+function Sync.IsPeer(name)
+    if not (net and name) then return false end
+    for _, n in ipairs(net.roster or {}) do if n == name then return true end end
+    return false
+end
+
 -- One message to every target (to = nil: once, on the channel).
 function Sync.SendTo(msg, to, urgent)
     if not to then send(msg, urgent); return end
@@ -912,6 +919,7 @@ function Sync:Init()
             end
             Sync.heardTotal = Sync.heardTotal + 1
         end
+        if VS.LayerNet and VS.LayerNet:OnMessage(msg, who, sender) then return end   -- LQ / LA
         if Sync:OnHereMessage(msg, who) then return end
         if Sync:OnSpotMessage(msg, who, sender) then return end
         Sync:OnMessage(msg, who)

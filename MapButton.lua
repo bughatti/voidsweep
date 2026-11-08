@@ -139,8 +139,11 @@ function VS.MapButton:Init()
         GameTooltip:AddLine("Toggle what shows on the map.", 0.8, 0.8, 0.8)
         -- WoW Forever: your layer (Layer.lua)
         if VS.Layer and RegionalUniqueNamesEnabled and RegionalUniqueNamesEnabled() then
-            local pair = VS.Layer:Here()
+            local pair, zone = VS.Layer:Here()
             GameTooltip:AddLine(pair and ("Your layer: |cffffd200" .. pair .. "|r") or "Your layer: not known yet (point at any NPC)", 0.8, 0.8, 0.8)
+            local s = VS.LayerNet and zone and VS.LayerNet:Summary(zone)
+            if s then GameTooltip:AddLine("Layers here: " .. s, 0.8, 0.8, 0.8, true) end
+            GameTooltip:AddLine("/vsw layers asks other VoidSweep players", 0.5, 0.5, 0.5)
         end
         GameTooltip:Show()
     end)
