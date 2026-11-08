@@ -48,6 +48,13 @@ function LN:Ask(zone)
     return true
 end
 
+-- Seconds until this zone may be asked about again (0 = now). For the Layers window.
+function LN:AskLeft(zone)
+    local t = zone and lastAsk[zone]
+    local l = t and (ASK_CD - (GetTime() - t)) or 0
+    return l > 0 and l or 0
+end
+
 -- { [pair] = count } of other Void players in this zone (answers within LIVE).
 function LN:Counts(zone)
     local out, now = {}, GetTime()
@@ -57,18 +64,20 @@ function LN:Counts(zone)
     return out
 end
 
--- Names of Void players on a layer in a zone (for the hop, step 4). Never shown.
+-- Names of Void players on a layer in a zone who host hops (Hop.lua). Never shown.
+-- Fresher than LIVE: a host's answer is only good for HOST_LIVE (they may have moved on).
+local HOST_LIVE = 300
 function LN:Hosts(zone, pair)
     local out, now = {}, GetTime()
     for name, a in pairs(census[zone] or {}) do
-        if a.pair == pair and now - a.t <= LIVE then out[#out + 1] = name end
+        if a.pair == pair and a.host and now - a.t <= HOST_LIVE then out[#out + 1] = name end
     end
     return out
 end
 
 -- Messages. Returns true if it was one of ours.
 function LN:OnMessage(msg, who, replyTo)
-    local tag, proto, zoneS, pair = msg:match("^(L[QA]):(%d+):(%d+):?(.*)$")
+    local tag, proto, zoneS, pair = msg:match("^(L[QAH]):(%d+):(%d+):?(.*)$")
     if not tag then return false end
     if proto ~= PROTO or not forever() then return true end
     local zone = tonumber(zoneS)
@@ -83,6 +92,14 @@ function LN:OnMessage(msg, who, replyTo)
         if not mine or here ~= zone then return true end                      -- not there: stay silent
         lastReplyTo[who] = GetTime()
         VS.Sync.SendTo(("LA:%s:%d:%s"):format(PROTO, zone, mine), { replyTo or who }, true)
+        -- I host layer hops right now (Hop.lua): a separate LH after the LA (not urgent, so it
+        -- queues behind it). A ":h" on the LA itself made 0.2.20 drop the whole answer (Codex).
+        if VS.Hop and VS.Hop:CanHost() then
+            VS.Sync.SendTo(("LH:%s:%d:%s"):format(PROTO, zone, mine), { replyTo or who }, false)
+        end
+    elseif tag == "LH" then   -- "and I host": only right after that player's LA, same layer
+        local a = census[zone] and census[zone][who]
+        if a and a.pair == pair and GetTime() - a.t <= ANSWER_WINDOW then a.host = true end
     else   -- LA: only from a player we just asked about this zone (Codex: anyone could
            -- whisper made-up answers and keep them fresh)
         local t = asked[zone] and asked[zone][who]
@@ -109,7 +126,8 @@ function LN:Summary(zone)
     for pair, n in pairs(counts) do if pair ~= mine then others[#others + 1] = { pair, n } end end
     table.sort(others, function(a, b) return a[2] > b[2] end)
     for _, o in ipairs(others) do
-        parts[#parts + 1] = ("%s: %d Void player%s"):format(o[1], o[2], o[2] == 1 and "" or "s")
+        local hop = #self:Hosts(zone, o[1]) > 0 and (" |cff33ff33(/vsw hop " .. o[1] .. ")|r") or ""
+        parts[#parts + 1] = ("%s: %d Void player%s%s"):format(o[1], o[2], o[2] == 1 and "" or "s", hop)
     end
     return #parts > 0 and table.concat(parts, " · ") or nil
 end

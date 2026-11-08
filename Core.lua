@@ -224,8 +224,30 @@ SlashCmdList.VOIDSWEEP = function(msg)
         end
         return
     end
-    if msg == "layers" then   -- WoW Forever: which layers other VoidSweep players are on here
+    if msg == "layers" then   -- WoW Forever: the Layers window (LayerUI.lua)
+        VS.LayerUI:Toggle()
+        return
+    end
+    if msg == "layers text" then   -- the same as a chat line
         VS.LayerNet:Report()
+        return
+    end
+    -- WoW Forever layer hop (Hop.lua): /vsw hop [layer], /vsw host, /vsw hopstay
+    -- "hop" or "hop <layer>" (a space): "hopstay" must not land here (Codex)
+    local hopTo = msg == "hop" and "" or msg:match("^hop%s+(%S+)$")
+    if hopTo then
+        VS.Hop:Start(hopTo ~= "" and hopTo or nil)
+        return
+    end
+    if msg == "host" then
+        VS.Hop:SetHosting(not VS.Hop:HostingOn())
+        return
+    end
+    if msg == "hopstay" then
+        local cfg = VS:Config()
+        cfg.hopStay = not cfg.hopStay
+        print(("|cff00c7ffVoidSweep|r: after a layer hop, %s."):format(cfg.hopStay
+            and "stay in the host's group (keeps you there if leaving would send you back)" or "leave the host's group"))
         return
     end
     if msg == "net" or msg == "synctest" then
@@ -234,7 +256,7 @@ SlashCmdList.VOIDSWEEP = function(msg)
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw hop · /vsw host · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()

@@ -1,5 +1,13 @@
 # VoidSweep Changelog
 
+## 0.2.21
+
+- **WoW Forever: layer hop.** `/vsw hop` moves you to another layer in your zone, `/vsw hop 6833-21` to that one. A VoidSweep player on that layer sends you a group invite, VoidSweep accepts it (only that one invite), checks that your layer really changed, and leaves the group again. No host answers, or you didn't move? It tries the next one. One hop every 5 minutes.
+- **A rare up on another layer with a Void host there** now pops up "Hop?"; one click and you're on your way.
+- **Hosting is opt-in:** `/vsw host`, or **Sweep: Host layer hops** in the Void hub's quick switches. Hosts only invite while solo, out of combat and outside instances, at most once every 2 minutes, and leave the group on their own after 3 minutes.
+- If leaving the group ever sends you back to your old layer, VoidSweep notices and keeps you grouped on later hops (`/vsw hopstay` to change).
+- **Layers window:** `/vsw layers`, or **Layers...** in the VoidSweep world-map button menu. It shows your layer, every layer other VoidSweep players reported in your zone (how many Void players, and a **Hop** button where one of them hosts), **Hop to any layer**, **Refresh**, what a hop is doing right now, the 5-minute hop timer, and the two options (host hops for others, stay grouped after a hop). Drag it anywhere; Esc closes it. `/vsw layers text` still prints the list in chat.
+
 ## 0.2.20
 
 - **WoW Forever: which layers other VoidSweep players are on.** `/vsw layers` asks the VoidSweep players in your zone and shows each layer with how many Void players are on it, for example "6833-20 (you + 1 Void player) · 6833-21: 2 Void players". The map button's tooltip shows the same. When a rare is reported up on another layer, VoidSweep asks quietly, so it already knows whether a Void player is over there (that's what the coming layer hop needs).
