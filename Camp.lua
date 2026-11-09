@@ -18,6 +18,33 @@
 -- Title line: "Worth sitting: 3 new" or "Nothing new for you". The same verdict goes into
 -- the object's tooltip. The box goes away 20 s after you walk off. /vsw camp toggles it.
 ----------------------------------------------------------------------
+-- Borders are one screen pixel (tools/cmd/pixelfix, 2026-11-09). WoW snaps each border
+-- piece to the pixel grid, and a thin line on a fractional position can snap to 0 px: a side
+-- of a box vanishes. VoidPX() asks for one real pixel, and the hook below (installed once, by
+-- the first Void addon loaded) turns snapping off on the edges of flat WHITE8X8 borders, like
+-- Blizzard's NineSliceUtil.DisableSharpening, so a 1 px line always covers a pixel.
+local function VoidPX()
+    local s = UIParent and UIParent:GetEffectiveScale()
+    if s and s > 0 and PixelUtil and PixelUtil.GetPixelToUIUnitFactor then return PixelUtil.GetPixelToUIUnitFactor() / s end
+    return 1
+end
+if not _G.__VoidBorderHook and hooksecurefunc and NineSliceUtil and NineSliceUtil.ApplyLayout then
+    _G.__VoidBorderHook = true
+    local EDGES = { "TopEdge", "BottomEdge", "LeftEdge", "RightEdge",
+                    "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner" }
+    hooksecurefunc(NineSliceUtil, "ApplyLayout", function(c)
+        local i = type(c) == "table" and c.backdropInfo
+        local e = i and i.edgeFile
+        if type(e) ~= "string" or not e:lower():find("white8x8", 1, true) or (tonumber(i.edgeSize) or 0) > 3 then return end
+        for _, k in ipairs(EDGES) do
+            local t = c[k]
+            if t and t.SetSnapToPixelGrid then
+                t:SetSnapToPixelGrid(false)
+                t:SetTexelSnappingBias(0)
+            end
+        end
+    end)
+end
 local ADDON, VS = ...
 local C = {}
 VS.Camp = C
@@ -231,7 +258,12 @@ local function pos()
     if y and readable(y) and readable(x) then return y, x, inst end
 end
 
+-- Closed by the box's x: { since = the camp visit it was closed on (campSince; nil while
+-- lingering) }. A new camp visit or a camp item not seen before opens it again.
+local closed = nil
+
 local function note(key, obj, id)
+    if closed and not seen[key] then closed = nil end
     local y, x, inst = pos()
     seen[key] = { obj = obj, id = id, t = GetTime(), y = y, x = x, inst = inst }
     -- kept through a /reload or relog (5 minutes): VoidSweepDB.campSeen[key] = { id, serverTime }
@@ -300,7 +332,7 @@ local function build()
     f:SetSize(250, 60)
     f:SetFrameStrata("MEDIUM")
     f:SetClampedToScreen(true)
-    f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = VoidPX() })
     f:SetBackdropColor(0.04, 0.04, 0.07, 0.9)
     f:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
     local p = db().campPos
@@ -326,6 +358,53 @@ local function build()
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.title:SetPoint("TOPLEFT", 8, -6)
     f.title:SetJustifyH("LEFT")
+    -- Sit (the user, 2026-11-09): resting by the fire for a minute is what gives the buffs.
+    -- A plain button calling the SIT emote, not a secure /sit macro button: a secure child
+    -- would make this box protected, and it hides itself on a timer, also in combat.
+    -- Close (the user, 2026-11-09: "so it doesn't stay longer than it needs to"): hides it
+    -- for this visit to this fire; the next camp (or a new camp item) brings it back.
+    local close = CreateFrame("Button", nil, f)
+    close:SetSize(16, 16)
+    close:SetPoint("TOPRIGHT", -4, -5)
+    close.text = close:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    close.text:SetPoint("CENTER", 0, 1)
+    close.text:SetText("|cff8c8c9ex|r")
+    close:SetScript("OnClick", function() C:Close() end)
+    close:SetScript("OnEnter", function(self)
+        self.text:SetText("|cffff5555x|r")
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Close")
+        GameTooltip:AddLine("Back at the next campfire you walk up to.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    close:SetScript("OnLeave", function(self)
+        self.text:SetText("|cff8c8c9ex|r")
+        GameTooltip:Hide()
+    end)
+    f.close = close
+    local sit = CreateFrame("Button", nil, f, "BackdropTemplate")
+    sit:SetSize(44, 16)
+    sit:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, 0)
+    sit:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = VoidPX() })
+    sit:SetBackdropColor(0.10, 0.12, 0.15, 1)
+    sit:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
+    sit.text = sit:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    sit.text:SetPoint("CENTER")
+    sit.text:SetText("Sit")
+    sit:SetScript("OnClick", function() C:Sit() end)
+    sit:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(A[1], A[2], A[3], 1)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Sit down by the fire")
+        GameTooltip:AddLine("Rest here for 1 minute to get the camp's buffs.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    sit:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
+        GameTooltip:Hide()
+    end)
+    sit:Hide()
+    f.sit = sit
     f.lines = {}
     f:Hide()
     f.elapsed = 0
@@ -338,9 +417,23 @@ end
 
 local ORDER = { new = 1, wait = 2, have = 3, covered = 4, nouse = 5, info = 6 }
 
+function C:Close()
+    closed = { since = campSince }
+    if box then box:Hide() end
+end
+
 function C:Refresh()
     if not (on() and forever()) then if box then box:Hide() end return end
     local list, atCamp = here()
+    if closed then
+        if not atCamp then closed.away = true end         -- walked away from that fire
+        if (campSince and campSince ~= closed.since) or (atCamp and closed.away) then
+            closed = nil                                  -- a new camp visit: show it again
+        else
+            if box then box:Hide() end
+            return
+        end
+    end
     if #list > 0 or atCamp then lastNear = GetTime() end
     if #list == 0 and not atCamp and GetTime() - lastNear > LINGER then
         if box then box:Hide() end
@@ -395,8 +488,13 @@ function C:Refresh()
     else
         box.title:SetText("|cff00c7ffCampfire|r")
     end
+    -- the Sit button: at a fire and not already resting (then the countdown line takes over)
+    local restA = aura(REST_AURA)
+    local restExp = restA and readable(restA.expirationTime) and restA.expirationTime
+    local showSit = atCamp and not (restExp and restExp > GetTime())
+    box.sit:SetShown(showSit and true or false)
     local i = 0
-    local width = box.title:GetStringWidth() + 20
+    local width = box.title:GetStringWidth() + 20 + 20 + (showSit and 52 or 0)   -- + the x, + Sit
     local function line(left, right)
         i = i + 1
         local l = box.lines[i]
@@ -474,9 +572,31 @@ ev:SetScript("OnEvent", function(_, event, _, newGuid)
         if obj then note(newGuid, obj, id) end
     elseif event == "UNIT_AURA" then
         -- arriving at a campfire (its aura) opens the box; a buff came: "NEW" turns into "have"
-        if forever() and on() and ((box and box:IsShown()) or aura(CAMP_AURA)) then C:Refresh() end
+        -- while closed too: it has to see you leave the fire to come back at the next one
+        if forever() and on() and ((box and box:IsShown()) or closed or aura(CAMP_AURA)) then C:Refresh() end
     end
 end)
+
+-- Sit down (the box's Sit button). The emote API is marked restricted; if the game says no,
+-- say what to do instead.
+function C:Sit()
+    if InCombatLockdown() then
+        print("|cff00c7ffVoidSweep|r: you can't sit down in combat.")
+        return
+    end
+    -- Only a real error counts: the return value's meaning is unclear (the API docs call it
+    -- "success", Blizzard's own chat code reads it as "restricted"; Sol review), and sitting
+    -- worked in game.
+    local ok
+    if C_ChatInfo and C_ChatInfo.PerformEmote then
+        ok = pcall(C_ChatInfo.PerformEmote, "SIT")
+    elseif DoEmote then
+        ok = pcall(DoEmote, "SIT")
+    end
+    if not ok then
+        print("|cff00c7ffVoidSweep|r: the game won't let an addon sit you down right now. Type |cffffd200/sit|r instead.")
+    end
+end
 
 function C:Toggle()
     local cfg = VS:Config()

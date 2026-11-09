@@ -1,5 +1,11 @@
 # VoidSweep Changelog
 
+## 0.2.24
+
+- **Sit button on the campfire box:** one click and you sit down by the fire; rest a minute and the camp's buffs land. It hides while the rest timer counts down.
+- **Close button (x) on the campfire box:** done with a fire? Close the box; it comes back at the next campfire you walk up to.
+- **Fixed: box borders missing a side.** A box's left, right or bottom line could vanish, depending on where it sat on screen (the campfire box and its Sit button, the Layers window, the Players online box). Borders are now exactly one screen pixel and drawn so they can't round away.
+
 ## 0.2.23
 
 - **Fixed: the campfire box now knows which buffs you already have.** On WoW Forever all camp buffs come as one buff, "Camp Benefits", that lists what you got ("Lodestone: Melee Attack Power increased by 32."). The box now reads that list, so after resting those items show **have** (with minutes left) instead of still saying NEW, and "Worth sitting" only counts what you'd really gain at the next camp.
