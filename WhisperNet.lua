@@ -54,7 +54,7 @@ end
 --   net:Pick(k)                  up to k random other members
 --   net:Noted(name)              call right before whispering name (hides the offline line)
 --   net:Sent(name, result)       call right after, with SendAddonMessage's return value
--- Net.New(channel, onRoster, store): store = a SavedVariables table for offline marks
+-- Net.New(channel, onRoster, store): store = a table for offline marks (session only)
 ----------------------------------------------------------------------
 local Obj = {}
 Obj.__index = Obj
@@ -164,9 +164,9 @@ end
 -- a timed-out mark made logged-off players count as online again every 30 min, so the
 -- players box popped up and down (live 11-07). After UNREACH_FOR, X may be picked again,
 -- which is how we find out they're back.
--- Marks are SAVED (the addon passes its SavedVariables table to Net.New) and timed with
--- time(), not GetTime(): kept only in memory, every /reload counted logged-off members
--- as online again until their next bounce (5 -> 2 within a minute, live 11-07).
+-- Marks are timed with time(), not GetTime(). Since 2026-11-09 they're never saved (the user:
+-- "get rid of the offline list"): the addons pass a fresh table, so after a /reload the count can
+-- include logged-off members until their next bounce (5 -> 2 within a minute, live 11-07).
 local UNREACH_FOR = 1800   -- a marked player may be whispered again after this
 local BOUNCE_WAIT = 5      -- the "No player named" line comes back well within this
 local STALE_MARK  = 7200   -- busy channel only: marks older than this stop being counted
@@ -257,7 +257,7 @@ end
 -- Hide that line in chat (it's our hidden whisper, not something the player sent).
 function Obj:HidesNotice(text) return self:NoticeName(text) ~= nil end
 
--- store: the addon's saved table for offline marks (kept across reloads); optional.
+-- store: a table for offline marks (a fresh one: they are not saved); optional.
 ----------------------------------------------------------------------
 -- Refused channels (live Forever, 2026-11-08). Anyone can /join an open channel, own it
 -- once it empties and /ban players. A banned player's join is answered

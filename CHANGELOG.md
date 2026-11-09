@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.26
+
+- **Nothing about other players is saved any more:** the short list of players who had just logged off (it kept the online count right after a reload) now lasts only for your session, and the old saved list is deleted.
+- "Hop to any layer" with nobody to bring you over now says "on another layer", not "on that layer".
+
 ## 0.2.25
 
 - **Layer hops that work:** a hop needs a Void player on the other layer to send you an invite, and with hosting off by default there was almost never one. Helping others change layer is now **on by default**, so every VoidSweep player can bring others over. A helping player only invites while solo, alive, out of combat and outside instances, at most once every 2 minutes and 8 times an hour, and the group ends on its own. A one-time chat line says so; the Void hub's quick switches (or `/vsw host`) turn it off, and anyone who turned it off before keeps it off.

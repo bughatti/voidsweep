@@ -108,8 +108,10 @@ function ns.LayerCoreBuild(owner)
     ------------------------------------------------------------------
     local CHANNEL, PW, today = Net.DailyChannel(DAILY_TAG, DAILY_SALT)
     local OLD = { (Net.DailyChannel(DAILY_TAG, DAILY_SALT, today - 1)) }
-    -- offline marks: saved by VoidLayer's TOC; with only VoidSweep they last the session
-    VoidLayerNetOffline = VoidLayerNetOffline or {}
+    -- offline marks (players whose whisper bounced): this session only, never saved (the user,
+    -- 2026-11-09: "get rid of the offline list"; the README says no names are saved). After a
+    -- reload the online count can include a player who just logged off until their whisper bounces.
+    local offlineMarks = {}
     -- Members seen in any read of the list this session: a busy channel (over 300) is read a
     -- random window at a time, so one read isn't everyone (Sol review).
     local everPeer, everN = {}, 0
@@ -128,7 +130,7 @@ function ns.LayerCoreBuild(owner)
         end
         publish()
         changed()
-    end, VoidLayerNetOffline)
+    end, offlineMarks)
     if _G.VoidPresence and _G.VoidPresence.Listen then
         _G.VoidPresence:Listen(function() net:RequestRoster(true); publish() end)
     end
@@ -581,7 +583,8 @@ function ns.LayerCoreBuild(owner)
                 end)
                 return
             end
-            say("no Void player who can bring you over is on that layer in this zone right now. Try again in a few minutes.")
+            say(("no Void player who can bring you over is on %s in this zone right now. Try again in a few minutes.")
+                :format(pair and "that layer" or "another layer"))
             changed()
             return
         end
