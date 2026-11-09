@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.23
+
+- **Fixed: the campfire box now knows which buffs you already have.** On WoW Forever all camp buffs come as one buff, "Camp Benefits", that lists what you got ("Lodestone: Melee Attack Power increased by 32."). The box now reads that list, so after resting those items show **have** (with minutes left) instead of still saying NEW, and "Worth sitting" only counts what you'd really gain at the next camp.
+
 ## 0.2.22
 
 - **WoW Forever: is this campfire worth sitting at?** Walk up to a player's campfire and a small box judges it for you: "Worth sitting: 3 new buffs" or "Nothing new for you here". One line per camp item: **NEW** with what you'd gain at your level, **have** (minutes left), **covered** (your class buff of that kind already gives it; they don't stack), **no use** (Intellect on a rogue, the other faction's banner) or **wait** (the tent's rested XP is on cooldown, or you're already rested). While you rest it counts down to your buffs, and the lines turn to "have" when they land. Items show up as you walk up to them or hover them, and hovering adds the same verdict to the item's tooltip. The box opens at the fire and goes away 20 seconds after you leave; drag it anywhere, `/vsw camp` turns it off. Camp item data from Campfire Tooltips: Forever by GideonWhitlock (GPL-3.0-or-later).

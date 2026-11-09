@@ -96,6 +96,70 @@ local function amount(key, b, level)
     return b.effect
 end
 
+----------------------------------------------------------------------
+-- What you already have: Forever gives NO per-object buff (measured 2026-11-08, none of the
+-- data's aura IDs ever showed up). Resting puts ONE aura on you, "Camp Benefits" (1229741, 1 hour),
+-- and its tooltip lists the objects:
+--   "Gained the following camp benefits:\r\n\r\nLodestone: Melee Attack Power increased by 32.\r\n\r\n"
+-- So "have" = that list, read from the tooltip once per aura instance.
+----------------------------------------------------------------------
+local BENEFITS_AURA = 1229741
+-- the object's name first (CampNames), then words in the effect text
+local KEYWORDS = {
+    { "critical", "chair" }, { "attack power", "attack" }, { "armor", "lute" },
+    { "all attributes", "fish" }, { "all stats", "fish" }, { "strength", "strength" },
+    { "stamina", "stamina" }, { "intellect", "intellect" }, { "spirit", "spirit" }, { "mana", "mana" },
+}
+
+local function benefitKey(item, effect)
+    local loc = GetLocale()
+    local id = CD.names[loc] and CD.names[loc][item]
+    local o = id and CD.objects[id]
+    if o and o.benefit then return o.benefit end
+    local e = effect:lower()
+    for _, k in ipairs(KEYWORDS) do
+        if e:find(k[1], 1, true) then return k[2] end
+    end
+    return "raw:" .. item     -- a camp object we don't know yet: still listed as "have"
+end
+
+local cache = { iid = nil, map = nil, exp = nil, at = 0 }
+local REREAD = 30     -- seconds: the same aura can be refreshed in place with another camp's list
+
+-- { [benefit] = { name = "Lodestone", text = "Melee Attack Power increased by 32." } }, expirationTime
+function C:Benefits()
+    local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, BENEFITS_AURA)
+    if not (ok and a) then
+        -- in combat the lookup can come back empty while the aura is still on you (Codex review)
+        -- ...but not past its known end time (Astra review)
+        if InCombatLockdown() and not (cache.exp and cache.exp <= GetTime()) then return cache.map, cache.exp end
+        cache.iid, cache.map, cache.exp = nil, nil, nil
+        return nil
+    end
+    local iid = readable(a.auraInstanceID) and a.auraInstanceID or nil
+    local exp = readable(a.expirationTime) and a.expirationTime or nil
+    if not iid then return cache.map, exp or cache.exp end   -- hidden in combat: keep what we read
+    -- re-read on a new aura, a refreshed timer (rested at another camp) or every 30 s (Codex review)
+    if cache.iid ~= iid or not cache.map or (exp and exp ~= cache.exp) or GetTime() - cache.at > REREAD then
+        local okT, d = pcall(C_TooltipInfo.GetUnitBuffByAuraInstanceID, "player", iid)
+        local text = okT and d and d.lines and d.lines[2] and d.lines[2].leftText
+        if type(text) ~= "string" or not readable(text) then return cache.map, exp end
+        local map = {}
+        -- "Item: effect" lines; the "...camp benefits:" header has nothing after its colon
+        for item, effect in text:gmatch("([^\r\n:]+): ?([^\r\n]+)") do
+            item = strtrim(item)
+            map[benefitKey(item, effect)] = { name = item, text = strtrim(effect) }
+        end
+        cache.iid, cache.map, cache.exp, cache.at = iid, map, exp, GetTime()
+    end
+    return cache.map, exp
+end
+
+local function haveText(exp)
+    local left = exp and exp > 0 and (exp - GetTime())
+    return left and left > 0 and ("have it (%dm left)"):format(math.floor(left / 60)) or "have it"
+end
+
 local function classBuff(b)
     local name = b.exclusive and b.exclusive:match("Does not stack: (.-)%.?$")
     if not name then return nil end
@@ -110,6 +174,8 @@ function C:Judge(obj)
     local b = CD.benefits[key]
     if not b then return "info", obj.name end
     if not b.aura then return "info", b.effect or obj.name end      -- campfire, oven, bots ...
+    local have, haveExp = C:Benefits()
+    if have and have[key] and key ~= "tent" then return "have", haveText(haveExp) end
     if obj.unsureFaction then
         local okB, mineB = pcall(C_UnitAuras.GetPlayerAuraBySpellID, b.aura)
         if okB and mineB then return "have", "have it" end
@@ -131,9 +197,7 @@ function C:Judge(obj)
     local ok, mine = pcall(C_UnitAuras.GetPlayerAuraBySpellID, b.aura)
     mine = ok and mine or nil
     if mine then
-        local e = readable(mine.expirationTime) and mine.expirationTime
-        local left = e and e > 0 and (e - GetTime())
-        return "have", left and ("have it (%dm left)"):format(math.floor(left / 60)) or "have it"
+        return "have", haveText(readable(mine.expirationTime) and mine.expirationTime or nil)
     end
     if USE[key] and not USE[key][class] then return "nouse", amount(key, b, level) .. " (no use to you)" end
     local cb = classBuff(b)
@@ -307,6 +371,14 @@ function C:Refresh()
                 local st, txt = C:Judge({ benefit = key, name = name or key })
                 byBenefit[key] = true
                 rows[#rows + 1] = { st = st, txt = txt, name = name or key }
+            end
+        end
+        -- and what your Camp Benefits lists (the real source on Forever)
+        local have, haveExp = C:Benefits()
+        for key, v in pairs(have or {}) do
+            if not byBenefit[key] then
+                byBenefit[key] = true
+                rows[#rows + 1] = { st = "have", txt = haveText(haveExp), name = v.name }
             end
         end
     end

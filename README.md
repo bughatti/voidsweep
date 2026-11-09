@@ -1,8 +1,12 @@
 # VoidSweep
 
-**A live map radar for Midnight: rares, world bosses, treasures and lore that are up right now, with one click to get there.**
+**Works on:** WoW Midnight · WoW Forever
 
-VoidSweep reads the game's own live spawn markers, so its pins show what's actually up right now, with the rare's health. It remembers every spot it has seen, shares spots and rare sightings between players, and hides treasures you've already looted. Click any pin for directions.
+> **WoW Forever players: please update to the latest version.** Versions from before November 8, 2026 use the old sharing channels, so they can't share with current players and aren't counted in the Players online box. The CurseForge app updates it for you; if you installed by hand, download the newest file.
+
+**A live map radar: rares, world bosses, treasures and lore that are up right now, with one click to get there.**
+
+VoidSweep reads the game's own live spawn markers, so its pins show what's actually up right now, with the rare's health. It remembers every spot it has seen, shares spots and rare sightings between players, and hides treasures you've already looted. Click any pin for directions. On WoW Forever it spots rares from nameplates, your target and your mouseover, and tells you which campfires are worth sitting at.
 
 ---
 
@@ -63,9 +67,9 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ## Getting Started
 
-1. Install with the CurseForge app, or copy the `VoidSweep` folder into `World of Warcraft/_retail_/Interface/AddOns/`.
+1. Install with the CurseForge app, or copy the `VoidSweep` folder into `World of Warcraft/_retail_/Interface/AddOns/` (WoW Forever: `_forever_/Interface/AddOns/`).
 2. Restart WoW or `/reload`.
-3. Open your map in any Midnight zone — the dots are VoidSweep. Click one to head there.
+3. Open your map in any zone — the dots are VoidSweep. Click one to head there.
 
 ---
 
@@ -89,7 +93,8 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ## Compatibility
 
-- **WoW 12.1.5** (Midnight Season 2) and **WoW Forever**
+- **WoW Midnight** 12.1.5 (Season 2)
+- **WoW Forever**
 - Standalone — nothing else to install
 
 ---
