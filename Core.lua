@@ -212,6 +212,12 @@ SlashCmdList.VOIDSWEEP = function(msg)
             VoidPresence:IsShown() and "|cff33ff33on|r (drag it anywhere)" or "|cffff5555off|r"))
         return
     end
+    if msg == "camp" then    -- WoW Forever: the "is this campfire worth it" box (Camp.lua)
+        local now = VS.Camp:Toggle()
+        print(("|cff00c7ffVoidSweep|r: campfire box %s"):format(now
+            and "|cff33ff33on|r (hover or walk up to a camp's objects)" or "|cffff5555off|r"))
+        return
+    end
     if msg == "layer" then   -- WoW Forever: which layer you're on (Layer.lua)
         local pair, zone = VS.Layer:Here()
         local info = zone and C_Map.GetMapInfo(zone)
@@ -256,7 +262,7 @@ SlashCmdList.VOIDSWEEP = function(msg)
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw hop · /vsw host · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw hop · /vsw host · /vsw camp · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()

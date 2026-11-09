@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.22
+
+- **WoW Forever: is this campfire worth sitting at?** Walk up to a player's campfire and a small box judges it for you: "Worth sitting: 3 new buffs" or "Nothing new for you here". One line per camp item: **NEW** with what you'd gain at your level, **have** (minutes left), **covered** (your class buff of that kind already gives it; they don't stack), **no use** (Intellect on a rogue, the other faction's banner) or **wait** (the tent's rested XP is on cooldown, or you're already rested). While you rest it counts down to your buffs, and the lines turn to "have" when they land. Items show up as you walk up to them or hover them, and hovering adds the same verdict to the item's tooltip. The box opens at the fire and goes away 20 seconds after you leave; drag it anywhere, `/vsw camp` turns it off. Camp item data from Campfire Tooltips: Forever by GideonWhitlock (GPL-3.0-or-later).
+- **Layers window stays up:** Esc no longer closes it (only its X does), and it comes back after a reload or login if you left it open.
+
 ## 0.2.21
 
 - **WoW Forever: layer hop.** `/vsw hop` moves you to another layer in your zone, `/vsw hop 6833-21` to that one. A VoidSweep player on that layer sends you a group invite, VoidSweep accepts it (only that one invite), checks that your layer really changed, and leaves the group again. No host answers, or you didn't move? It tries the next one. One hop every 5 minutes.

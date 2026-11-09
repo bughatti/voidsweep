@@ -68,7 +68,8 @@ local function build()
         local pt, _, rel, x, y = self:GetPoint()
         db().layerUIPos = { pt, rel, x, y }
     end)
-    table.insert(UISpecialFrames, "VoidSweepLayersFrame")   -- Esc closes it
+    -- Not in UISpecialFrames: Esc (clearing a target, closing the map) closed it all the time
+    -- (the user, 2026-11-08: "it needs to stay up at all times"). Only its X closes it.
 
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.title:SetPoint("TOPLEFT", 10, -8)
@@ -80,6 +81,7 @@ local function build()
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetSize(22, 22)
     close:SetPoint("TOPRIGHT", 1, 1)
+    close:SetScript("OnClick", function() db().layerUIOpen = false; f:Hide() end)
 
     -- your layer
     f.mine = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -243,15 +245,27 @@ function UI:Update()
     f:SetHeight(-(y - 22) + 28)
 end
 
+-- Open / closed is remembered (account-wide) and comes back after a reload or login.
 function UI:Toggle()
     win = win or build()
     if win:IsShown() then win:Hide() else win:Show() end
+    db().layerUIOpen = win:IsShown()
 end
 
 function UI:Show()
     win = win or build()
     win:Show()
+    db().layerUIOpen = true
 end
+
+local reopen = CreateFrame("Frame")
+reopen:RegisterEvent("PLAYER_LOGIN")
+reopen:SetScript("OnEvent", function()
+    if db().layerUIOpen and forever() then
+        win = win or build()
+        win:Show()
+    end
+end)
 
 -- Opening it asks the network too (the 5-minute limit per zone still applies).
 local function askOnOpen()
