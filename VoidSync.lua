@@ -919,8 +919,6 @@ function Sync:Init()
             end
             Sync.heardTotal = Sync.heardTotal + 1
         end
-        if VS.LayerNet and VS.LayerNet:OnMessage(msg, who, sender) then return end   -- LQ / LA
-        if VS.Hop and VS.Hop:OnMessage(msg, who, sender) then return end             -- HR / HA
         if Sync:OnHereMessage(msg, who) then return end
         if Sync:OnSpotMessage(msg, who, sender) then return end
         Sync:OnMessage(msg, who)

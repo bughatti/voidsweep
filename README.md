@@ -42,7 +42,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 - **Every Classic rare on your map** — over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) with a pin where they spawn, one pin per rare. Click for directions.
 - **Rares light up when seen:** the Classic world has no live rare markers, so VoidSweep watches nameplates, your target and your mouseover. A rare you see gets the bright ring for 5 minutes ("UP · seen 1 min ago"), and a kill is remembered for 2 hours ("Killed 12 min ago") so you can guess when it's back. Sightings are shared with other VoidSweep players.
 - **Is this campfire worth sitting at?** Walk up to a player's campfire and a small box tells you, for *you*: "Worth sitting: 3 new buffs", or "Nothing new for you here". Each camp item gets a line: **NEW** with what you'd gain at your level (+8% stats, +21 Stamina...), **have** (minutes left), **covered** (your class buff of that kind already gives it, and they don't stack), **no use** (Intellect on a rogue, the other faction's banner) or **wait** (the tent's rested XP is on cooldown). While you rest it counts down to your buffs. Hovering a camp item adds the same verdict to its tooltip.
-- **Layers:** see which layer you're on and which layers other VoidSweep players are on in your zone (`/vsw layers`), and hop to another one with a Void player's help when a rare is up there. Hosting hops for others is opt-in.
+- **Layers:** a rare a Void player sees on another layer of your zone asks "Hop there?", and one click brings you over with a Void player's help (`/vsw hop` hops to any other layer). Every VoidSweep player can bring others over: when one on your layer asks, you send a quick group invite that ends on its own (only while you're solo and out of combat, at most once every 2 minutes); **Help others change layer** in the Void hub's quick switches turns that off. For a layer window, your layer under the minimap and one-click hops, add **VoidLayer**: it shares VoidSweep's layer network.
 
 ---
 
@@ -59,7 +59,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 | `/vsw box` | Players-here box on or off |
 | `/vsw net` | Check that sharing works on your realm, and see how many other VoidSweep players are online there |
 | `/vsw camp` | WoW Forever: the campfire box on or off |
-| `/vsw layers` | WoW Forever: the Layers window |
+| `/vsw layers` | WoW Forever: the layers in your zone (VoidLayer's window if you have it) |
 | `/vsw spawns` | List the treasure spots recorded for the delve you're in |
 | `/vsw clear` | Forget every spot VoidSweep has learned or been sent |
 

@@ -422,9 +422,24 @@ function C:Close()
     if box then box:Hide() end
 end
 
+-- On a mount, in the air or on a flight path: you're leaving, not standing at the fire's edge.
+local function movingOn()
+    return (UnitOnTaxi and UnitOnTaxi("player")) or (IsFlying and IsFlying()) or (IsMounted and IsMounted())
+end
+
 function C:Refresh()
     if not (on() and forever()) then if box then box:Hide() end return end
     local list, atCamp = here()
+    -- Left the fire on a mount / flight: done with this camp right away (the user, 2026-11-09:
+    -- "im flying and had to close it far away"). Forget its items so they don't hold the box up;
+    -- the next fire's aura (or walking back) brings them back.
+    if not atCamp and campLeft and movingOn() then
+        campSince, campLeft, lastNear = nil, nil, 0
+        wipe(seen)
+        if VoidSweepDB then VoidSweepDB.campSeen = nil end
+        if box then box:Hide() end
+        return
+    end
     if closed then
         if not atCamp then closed.away = true end         -- walked away from that fire
         if (campSince and campSince ~= closed.since) or (atCamp and closed.away) then
@@ -434,7 +449,9 @@ function C:Refresh()
             return
         end
     end
-    if #list > 0 or atCamp then lastNear = GetTime() end
+    -- the 20 s count from the moment you left the fire's range, once: the camp's items (kept
+    -- while campLeft counts down) don't restart it (two 20 s waits back to back = ~40 s)
+    if atCamp or (#list > 0 and not campLeft) then lastNear = GetTime() end
     if #list == 0 and not atCamp and GetTime() - lastNear > LINGER then
         if box then box:Hide() end
         return

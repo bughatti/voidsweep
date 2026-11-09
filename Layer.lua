@@ -82,9 +82,27 @@ local function note(unit)
     recompute(zone)
 end
 
+-- The nameplates already on screen. NAME_PLATE_UNIT_ADDED only fires when a plate appears,
+-- so standing among NPCs after a login, a reload or a hop read nothing (live 11-09: "not
+-- known yet" in a camp full of plates). Units by name: plate.namePlateUnitToken errors on Forever.
+local function scanPlates()
+    if not active() then return end
+    for i = 1, 40 do
+        local u = "nameplate" .. i
+        if UnitExists(u) then pcall(note, u) end
+    end
+end
+
 -- A group change or a new zone can move you: start over, answers included (Codex: a
--- kept answer said the old layer for up to FRESH seconds after a hop).
-local function reset() wipe(readings); wipe(known) end
+-- kept answer said the old layer for up to FRESH seconds after a hop). Then read the plates
+-- around you again (twice: the new ones load in over a few seconds).
+local function reset()
+    wipe(readings); wipe(known)
+    C_Timer.After(1, scanPlates)
+    C_Timer.After(4, scanPlates)
+end
+-- and every 15 s, so a layer you're standing in never goes stale
+C_Timer.NewTicker(15, scanPlates)
 
 function L:Current(zone)
     local k = zone and known[zone]

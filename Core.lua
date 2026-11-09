@@ -230,15 +230,15 @@ SlashCmdList.VOIDSWEEP = function(msg)
         end
         return
     end
-    if msg == "layers" then   -- WoW Forever: the Layers window (LayerUI.lua)
-        VS.LayerUI:Toggle()
+    if msg == "layers" then   -- WoW Forever: VoidLayer's window, or the layers in chat (LayerLink.lua)
+        VS.OpenLayers()
         return
     end
     if msg == "layers text" then   -- the same as a chat line
         VS.LayerNet:Report()
         return
     end
-    -- WoW Forever layer hop (Hop.lua): /vsw hop [layer], /vsw host, /vsw hopstay
+    -- WoW Forever layer hop (VoidLayerCore.lua via LayerLink.lua): /vsw hop [layer], /vsw host, /vsw hopstay
     -- "hop" or "hop <layer>" (a space): "hopstay" must not land here (Codex)
     local hopTo = msg == "hop" and "" or msg:match("^hop%s+(%S+)$")
     if hopTo then
@@ -250,9 +250,8 @@ SlashCmdList.VOIDSWEEP = function(msg)
         return
     end
     if msg == "hopstay" then
-        local cfg = VS:Config()
-        cfg.hopStay = not cfg.hopStay
-        print(("|cff00c7ffVoidSweep|r: after a layer hop, %s."):format(cfg.hopStay
+        VS.Hop:SetStay(not VS.Hop:StayOn())
+        print(("|cff00c7ffVoidSweep|r: after a layer hop, %s."):format(VS.Hop:StayOn()
             and "stay in the host's group (keeps you there if leaving would send you back)" or "leave the host's group"))
         return
     end

@@ -1,5 +1,15 @@
 # VoidSweep Changelog
 
+## 0.2.25
+
+- **Layer hops that work:** a hop needs a Void player on the other layer to send you an invite, and with hosting off by default there was almost never one. Helping others change layer is now **on by default**, so every VoidSweep player can bring others over. A helping player only invites while solo, alive, out of combat and outside instances, at most once every 2 minutes and 8 times an hour, and the group ends on its own. A one-time chat line says so; the Void hub's quick switches (or `/vsw host`) turn it off, and anyone who turned it off before keeps it off.
+- **One layer network with the new VoidLayer addon:** layers, hops and rares now go over their own hidden channel (daily password) shared by VoidSweep and VoidLayer players, so there are more players to hop with. With both installed, only one of them does the work.
+- **Rares on other layers:** a rare a Void player sees on another layer of your zone asks "Hop there?", and the player who saw it brings you over.
+- **No more "try again in a few seconds":** when nobody is known on that layer yet, a hop asks around and carries on by itself.
+- Layers have short names now ("Layer A", "Layer B").
+- **The campfire box closes when you leave:** right away when you ride, fly or take a flight path out of the fire's range, and 20 seconds after you walk off (it could stay about 40).
+- **The Layers window moved to VoidLayer:** with both installed there were two windows showing the same thing. **Layers...** in the map button menu (and `/vsw layers`) opens VoidLayer's window, or lists the layers in chat without it.
+
 ## 0.2.24
 
 - **Sit button on the campfire box:** one click and you sit down by the fire; rest a minute and the camp's buffs land. It hides while the rest timer counts down.

@@ -96,10 +96,10 @@ local function generator(_, root)
     root:CreateCheckbox("Players-here box",
         function() return VoidPresence:IsShown() end,
         function() VoidPresence:SetShown(not VoidPresence:IsShown()); return refresh() end)
-    -- WoW Forever: the Layers window (LayerUI.lua)
-    if VS.LayerUI and RegionalUniqueNamesEnabled and RegionalUniqueNamesEnabled() then
+    -- WoW Forever: VoidLayer's window, or the layers in chat (LayerLink.lua)
+    if RegionalUniqueNamesEnabled and RegionalUniqueNamesEnabled() then
         root:CreateDivider()
-        root:CreateButton("Layers... (your layer, hop to another)", function() VS.LayerUI:Show() end)
+        root:CreateButton("Layers... (your layer, hop to another)", function() VS.OpenLayers() end)
     end
 end
 
