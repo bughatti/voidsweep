@@ -35,7 +35,7 @@
 -- Names stay in memory, never saved or shown (the host's name shows only in its invite).
 ----------------------------------------------------------------------
 local ADDON, ns = ...
-local CORE_VERSION = 1
+local CORE_VERSION = 2   -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -390,8 +390,14 @@ function ns.LayerCoreBuild(owner)
         end
         return false
     end
+    -- hopGroupUntil: a group you accepted for a hop (you were solo: the hop requires it) is yours to
+    -- leave for a few minutes, even when the host's name doesn't match the party member's (first real
+    -- hop, 2026-11-10: the user stayed grouped after VoidLayer gave up, most likely a name-format mismatch)
+    local hopGroupUntil, hopGroupSeen = 0, false
     local function leaveHopGroup(other)
-        if inGroupWith(other) and (GetNumGroupMembers() or 0) <= 2 and C_PartyInfo and C_PartyInfo.LeaveParty then
+        local two = (GetNumGroupMembers() or 0) <= 2 and not IsInRaid()
+        if two and (inGroupWith(other) or now() < hopGroupUntil) and C_PartyInfo and C_PartyInfo.LeaveParty then
+            hopGroupUntil = 0
             C_PartyInfo.LeaveParty()
             return true
         end
@@ -482,10 +488,12 @@ function ns.LayerCoreBuild(owner)
     Layer:OnChange(function(pair, zone)
         C:Label(zone, pair)
         if state and zone == state.zone then
-            if state.phase == "joined" and state.anyPair and pair ~= state.from then
-                state.pair = pair   -- test join: any layer other than the one you came from
-                moved()
-            elseif state.phase == "joined" and pair == state.pair then
+            -- In the host's group, ANY move off the layer you came from is the hop: joining puts you on
+            -- the group's layer, and the layer the host reported can be stale. First real hop (the user,
+            -- 2026-11-10, The Barrens): A 7054-28 -> joined -> 7054-29 at once, but the host had reported
+            -- another id ("Layer B"), so the check waited for B, never finished and never left the group.
+            if state.phase == "joined" and pair ~= state.from then
+                state.pair = pair
                 moved()
             elseif state.phase == "left" and pair ~= state.pair then
                 S().hopStay = true
@@ -498,15 +506,13 @@ function ns.LayerCoreBuild(owner)
     local function checkMove()
         if not (state and state.phase == "joined") then return end
         local cur = Layer:Current(state.zone)
-        if state.anyPair and cur and cur ~= state.from then
-            state.pair = cur
+        if cur and cur ~= state.from then
+            state.pair = cur   -- moved off your layer: that's the hop, whatever id the host reported
             moved()
         elseif state.anyPair and cur then
             local host = state.host
             stop(("test: you joined but stayed on %s, so %s was on your layer already. Leaving the group."):format(C:Label(state.zone, cur), host))
             leaveHopGroup(host)
-        elseif cur == state.pair then
-            moved()
         elseif cur then
             say(("joined, but you're still on %s. Trying another player."):format(C:Label(state.zone, cur)))
             state.phase = "retrying"
@@ -837,6 +843,12 @@ function ns.LayerCoreBuild(owner)
         elseif event == "PLAYER_REGEN_DISABLED" then
             if state and state.phase == "asking" then stop("hop cancelled: you're in combat.") end
         elseif event == "GROUP_ROSTER_UPDATE" then
+            -- the leave-without-name-match window lasts only as long as the hop's own group: once we've
+            -- been in it and it's gone, a later two-person group (a friend's) is never left (Sol review)
+            if hopGroupUntil > 0 then
+                if IsInGroup() then hopGroupSeen = true
+                elseif hopGroupSeen then hopGroupUntil, hopGroupSeen = 0, false end
+            end
             if state and state.phase == "joined" then
                 if inGroupWith(state.host) then state.seenHost = true
                 elseif state.seenHost then stop("the group ended before the move was confirmed.") end
@@ -866,6 +878,7 @@ function ns.LayerCoreBuild(owner)
                 return
             end
             AcceptGroup()
+            hopGroupUntil, hopGroupSeen = now() + MOVE_WAIT * 2 + REVERT_WATCH + 30, false   -- this group is the hop's
             C_Timer.After(0, function()
                 local d = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
                 if d then d.inviteAccepted = 1 end

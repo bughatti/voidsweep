@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.28
+
+- **WoW Forever, layer hops** (the engine VoidSweep shares with VoidLayer): a hop now finishes as soon as you've moved to the other player's layer, and you're always taken out of the hop group afterwards. Before, a hop could wait for a stale layer number and leave you grouped.
+
 ## 0.2.27
 
 - **WoW Forever:** pins to another continent take the zeppelin (and VoidGPS's learned boats when installed).
