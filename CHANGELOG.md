@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.29
+
+- **WoW Forever, layer hops** (the engine VoidSweep shares with VoidLayer): when the Void players on another layer can't bring anyone over right now, the hop message now says so instead of "no Void player", and the player who brought you over is listed on the layer you landed on.
+
 ## 0.2.28
 
 - **WoW Forever, layer hops** (the engine VoidSweep shares with VoidLayer): a hop now finishes as soon as you've moved to the other player's layer, and you're always taken out of the hop group afterwards. Before, a hop could wait for a stale layer number and leave you grouped.

@@ -472,6 +472,10 @@ function ns.LayerCoreBuild(owner)
     local nextHost
     local function moved()
         lastHop = now()
+        -- the host is on the layer you landed on, whatever they reported before (2026-11-10: host said
+        -- B, you landed on C, and the window kept listing them on B)
+        local c = census[state.zone] and census[state.zone][state.host]
+        if c then c.pair = state.pair end
         say(("you're on |cffffd200%s|r now."):format(C:Label(state.zone, state.pair)))
         if C:StayOn() and not state.test then   -- a test always leaves (Sol review)
             send(("HS:1:%s"):format(state.nonce), state.host, true)
@@ -589,8 +593,20 @@ function ns.LayerCoreBuild(owner)
                 end)
                 return
             end
-            say(("no Void player who can bring you over is on %s in this zone right now. Try again in a few minutes.")
-                :format(pair and "that layer" or "another layer"))
+            -- Known players there who answered "can't host" (in a group, in combat, dead, just hosted, or Help
+            -- others off): say so, else "Hop" looks broken (the user, 2026-11-10, Orgrimmar: Refresh showed
+            -- 1 player on another layer, Hop said nobody was there).
+            local busy = 0
+            for p, n in pairs(self:Counts(zone)) do
+                if p ~= cur and (not pair or p == pair) then busy = busy + n end
+            end
+            if busy > 0 then
+                say(("the Void player%s on %s can't bring anyone over right now (in a group, in combat, or Help others is off). Refresh in a few minutes and try again.")
+                    :format(busy == 1 and "" or "s", pair and "that layer" or "the other layer"))
+            else
+                say(("no Void player who can bring you over is on %s in this zone right now. Try again in a few minutes.")
+                    :format(pair and "that layer" or "another layer"))
+            end
             changed()
             return
         end
