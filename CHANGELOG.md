@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.30
+
+- **WoW Forever: sharing per faction** (the network VoidSweep shares with VoidGather and VoidLayer). Messages to the other faction never arrived and the players box counted them; Horde and Alliance now each have their own channel. `/vsw net` shows bounced whispers. Older versions stay on the old channel: please update.
+
 ## 0.2.29
 
 - **WoW Forever, layer hops** (the engine VoidSweep shares with VoidLayer): when the Void players on another layer can't bring anyone over right now, the hop message now says so instead of "no Void player", and the player who brought you over is listed on the layer you landed on.

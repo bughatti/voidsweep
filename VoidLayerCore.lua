@@ -27,7 +27,7 @@
 -- A host only invites while solo, alive, out of combat, outside instances, on the asked
 -- layer and zone, at most once every 2 minutes and 8 times an hour, and only channel members.
 --
--- Channel: a new one every UTC day with a password, both worked out from the date
+-- Channel: a new one every UTC day and per faction, with a password, both worked out from the date
 -- (WhisperNet.DailyChannel), so nobody can /join it by hand, own it and /ban players, and a
 -- takeover lasts a day at most. The password is in the addon's code, so it stops casual
 -- griefing, not a determined one: EVERY message is treated as hostile. A message can only
@@ -35,7 +35,9 @@
 -- Names stay in memory, never saved or shown (the host's name shows only in its invite).
 ----------------------------------------------------------------------
 local ADDON, ns = ...
-local CORE_VERSION = 2   -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
+-- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
+-- 3: one channel per faction, so this core must win over an older copy's both-factions one (2026-11-10)
+local CORE_VERSION = 3
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -106,8 +108,10 @@ function ns.LayerCoreBuild(owner)
     ------------------------------------------------------------------
     -- Channel + whisper transport
     ------------------------------------------------------------------
+    -- one channel per faction since 2026-11-10 (WhisperNet.lua): whispers don't cross factions
+    -- and neither do hop groups. OLD = yesterday's and the old both-factions ones, to leave.
     local CHANNEL, PW, today = Net.DailyChannel(DAILY_TAG, DAILY_SALT)
-    local OLD = { (Net.DailyChannel(DAILY_TAG, DAILY_SALT, today - 1)) }
+    local OLD = Net.OldDailyChannels(DAILY_TAG, DAILY_SALT, today)
     -- offline marks (players whose whisper bounced): this session only, never saved (the user,
     -- 2026-11-09: "get rid of the offline list"; the README says no names are saved). After a
     -- reload the online count can include a player who just logged off until their whisper bounces.
@@ -172,6 +176,9 @@ function ns.LayerCoreBuild(owner)
         join()
     end)
 
+    -- traffic this session, for /vl net: whispers the game took, refused as offline (result 12),
+    -- or refused otherwise. Bounces ("No player named X") are net.bounces.
+    local traffic = { sent = 0, offline = 0, refused = 0 }
     local queue, pumping = {}, nil
     local function pump()
         local item = table.remove(queue, 1)
@@ -181,6 +188,8 @@ function ns.LayerCoreBuild(owner)
         end
         net:Noted(item.to)
         local result = C_ChatInfo.SendAddonMessage(PREFIX, item.msg, "WHISPER", item.to)
+        local k = (result == nil or result == true or result == 0) and "sent" or result == 12 and "offline" or "refused"
+        traffic[k] = traffic[k] + 1
         net:Sent(item.to, result)
     end
     local function send(msg, to, urgent)
@@ -222,6 +231,20 @@ function ns.LayerCoreBuild(owner)
     function C:Online() return net:Others() end
     function C:Channel() return CHANNEL end
     function C:BlockReason() return Net.BlockReason(CHANNEL) end
+
+    -- /vl net: who's reachable and what our whispers did this session (bounces were invisible
+    -- before 2026-11-10, when the channel still mixed factions)
+    function C:NetReport()
+        net:RequestRoster(true)
+        C_Timer.After(3.5, function()
+            local why, others = Net.BlockReason(CHANNEL), net:Others()
+            if why then say("|cffff5555" .. why .. "|r")
+            elseif not others then say("couldn't read the member list yet, try again in a few seconds.")
+            else say(("%d other Void player%s of your faction online."):format(others, others == 1 and "" or "s")) end
+            say(("this session: %d whisper%s sent, %d bounced (not reachable), %d refused as offline, %d refused otherwise.")
+                :format(traffic.sent, traffic.sent == 1 and "" or "s", net.bounces, traffic.offline, traffic.refused))
+        end)
+    end
 
     ------------------------------------------------------------------
     -- Layer names: "Layer A", "Layer B" in the order you met them this session (per zone).

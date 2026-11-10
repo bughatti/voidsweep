@@ -13,7 +13,7 @@
 -- addon right now) and the messages go by addon whisper to a few of its members.
 -- Retail keeps sending on the channel, where it works.
 --
--- Copied as-is into each addon that uses it (VoidGather, VoidSweep; source of
+-- Copied as-is into each addon that uses it (VoidGather, VoidSweep, VoidLayer; source of
 -- truth: wow-addons/_shared/WhisperNet.lua). It uses the addon's private
 -- namespace, so every addon has its own copy. The one thing they share is the global
 -- VoidRosterTurnUntil (Net.Turn): only one channel can be selected for its member list
@@ -54,6 +54,8 @@ end
 --   net:Pick(k)                  up to k random other members
 --   net:Noted(name)              call right before whispering name (hides the offline line)
 --   net:Sent(name, result)       call right after, with SendAddonMessage's return value
+--   net.bounces                  whispers that came back "No player named" this session
+--   net.onBounce = fn(name)      optional: called on each of those
 -- Net.New(channel, onRoster, store): store = a table for offline marks (session only)
 ----------------------------------------------------------------------
 local Obj = {}
@@ -275,6 +277,7 @@ function Obj:HidesNotice(text) return self:NoticeName(text) ~= nil end
 -- at 00:00 UTC: a ban, or someone who took over the channel, lasts one day at most. Both
 -- are built from numbers when the addon runs, so neither is written in the files as text.
 --   name, pw, day = Net.DailyChannel(tag, salt)   tag = short letters, salt = the addon's number
+--   Net.OldDailyChannels(tag, salt, day)          the ones to leave (yesterday's, both-factions)
 ----------------------------------------------------------------------
 local CODE = "bcdfghjkmnpqrstvwxz23456789"   -- no vowels: no accidental words for the name filter
 local function mix(h, n) return (h * 31 + n) % 2147483629 end
@@ -292,10 +295,44 @@ function Net.Day()
     return math.floor(((GetServerTime and GetServerTime()) or time()) / 86400)
 end
 
-function Net.DailyChannel(tag, salt, day)
+-- One channel PER FACTION (2026-11-10, as VoidQuest 0.3.20): a channel lists both factions,
+-- but whispers don't cross them on Forever, so every whisper to an other-faction member
+-- bounced ("No player named X is currently playing") and the players box counted them as
+-- online (VoidLayer showed 8 while VoidQuest's own-faction count was 0). Hop groups can't
+-- cross factions either. faction: 1 Horde, 2 Alliance, 3 none yet (a new Pandaren; once they
+-- pick, the addons' 60 s day check sees a new name and moves them).
+-- faction: nil = yours; false = the old both-factions channel of that day (only to leave it).
+local FACTION_SALT = { Horde = 1, Alliance = 2 }
+local knownFaction   -- the first real faction seen sticks: a moment of no answer (or a
+                     -- battleground's other side) must not flip the channel on the 60 s check
+function Net.Faction()
+    if not knownFaction then
+        local f = UnitFactionGroup and UnitFactionGroup("player")
+        knownFaction = FACTION_SALT[f]
+    end
+    return knownFaction or 3
+end
+
+function Net.DailyChannel(tag, salt, day, faction)
     day = day or Net.Day()
+    if faction == nil then faction = Net.Faction() end
     local s = mix(mix(salt, day), salt % 97)
+    if faction then s = mix(s, faction) end
     return tag .. code(s, 6), code(mix(s, 104729), 8), day
+end
+
+-- Channels a /reload (or an older version) may have left us in, to leave: yesterday's of
+-- our faction, the no-faction ones (a Pandaren who just picked), and the old both-factions
+-- ones (before 2026-11-10), today's and yesterday's.
+function Net.OldDailyChannels(tag, salt, today)
+    today = today or Net.Day()
+    local mine = Net.Faction()
+    local out = { (Net.DailyChannel(tag, salt, today - 1)) }
+    for _, day in ipairs({ today, today - 1 }) do
+        out[#out + 1] = (Net.DailyChannel(tag, salt, day, false))
+        if mine ~= 3 then out[#out + 1] = (Net.DailyChannel(tag, salt, day, 3)) end
+    end
+    return out
 end
 
 function Net.Blocked(channel)
@@ -348,7 +385,7 @@ end
 
 function Net.New(channel, onRoster, store)
     local o = setmetatable({ channel = channel, onRoster = onRoster, roster = {}, count = nil,
-                             rosterAt = -ROSTER_EVERY, whispered = {},
+                             rosterAt = -ROSTER_EVERY, whispered = {}, bounces = 0,
                              unreach = type(store) == "table" and store or {} }, Obj)
     local addFilter = (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) or ChatFrame_AddMessageEventFilter
     if addFilter then
@@ -364,6 +401,9 @@ function Net.New(channel, onRoster, store)
             local name = o:NoticeName(a1)   -- our whisper bounced: unreachable for a while
             if name then
                 o.unreach[name] = time()
+                -- counted (2026-11-10: whispers to the other faction bounced and nothing showed it)
+                o.bounces = o.bounces + 1
+                if o.onBounce then pcall(o.onBounce, name) end
                 if o.onRoster then o.onRoster() end   -- the count drops
             end
         end

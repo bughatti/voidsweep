@@ -2,7 +2,7 @@
 
 **Works on:** WoW Midnight · WoW Forever
 
-> **WoW Forever players: please update to the latest version.** Versions from before November 8, 2026 use the old sharing channels, so they can't share with current players and aren't counted in the Players online box. The CurseForge app updates it for you; if you installed by hand, download the newest file.
+> **WoW Forever players: please update to the latest version.** Versions from before November 10, 2026 use the old sharing channels (both factions in one, where messages to the other faction never arrive), so they can't share with current players and aren't counted in the Players online box. The CurseForge app updates it for you; if you installed by hand, download the newest file.
 
 **A live map radar: rares, world bosses, treasures and lore that are up right now, with one click to get there.**
 
