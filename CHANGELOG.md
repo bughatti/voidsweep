@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.27
+
+- **WoW Forever:** pins to another continent take the zeppelin (and VoidGPS's learned boats when installed).
+
 ## 0.2.26
 
 - **Nothing about other players is saved any more:** the short list of players who had just logged off (it kept the online count right after a reload) now lasts only for your session, and the old saved list is deleted.
