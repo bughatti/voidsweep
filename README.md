@@ -1,4 +1,4 @@
-# VoidSweep
+# VoidSweep - Rare & Treasure Radar
 
 **Works on:** WoW Midnight · WoW Forever
 
@@ -41,6 +41,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 ### WoW Forever
 - **Every Classic rare on your map** — over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) with a pin where they spawn, one pin per rare. Click for directions.
 - **Rares light up when seen:** the Classic world has no live rare markers, so VoidSweep watches nameplates, your target and your mouseover. A rare you see gets the bright ring for 5 minutes ("UP · seen 1 min ago"), and a kill is remembered for 2 hours ("Killed 12 min ago") so you can guess when it's back. Sightings are shared with other VoidSweep players.
+- **Rares in dungeons and raids:** a rare (or rare elite) that shows up on a nameplate, your target or your mouseover plays a sound and says "Blind Hunter is here!", once per rare per run. Inside, there's no map pin and nothing is shared (every group has its own copy of the dungeon). With **VoidGPS**, its rare popup does this instead, so you never get two alerts.
 - **Is this campfire worth sitting at?** Walk up to a player's campfire and a small box tells you, for *you*: "Worth sitting: 3 new buffs", or "Nothing new for you here". Each camp item gets a line: **NEW** with what you'd gain at your level (+8% stats, +21 Stamina...), **have** (minutes left), **covered** (your class buff of that kind already gives it, and they don't stack), **no use** (Intellect on a rogue, the other faction's banner) or **wait** (the tent's rested XP is on cooldown). While you rest it counts down to your buffs. Hovering a camp item adds the same verdict to its tooltip.
 - **Layers:** a rare a Void player sees on another layer of your zone asks "Hop there?", and one click brings you over with a Void player's help (`/vsw hop` hops to any other layer). Every VoidSweep player can bring others over: when one on your layer asks, you send a quick group invite that ends on its own (only while you're solo and out of combat, at most once every 2 minutes); **Help others change layer** in the Void hub's quick switches turns that off. For a layer window, your layer under the minimap and one-click hops, add **VoidLayer**: it shares VoidSweep's layer network.
 
@@ -106,4 +107,4 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ---
 
-*Part of the Void addon family by Vede · GPL-3.0 licensed · [Source & bug reports](https://github.com/bughatti/voidsweep) · [All Void addons](https://www.curseforge.com/members/bughatti/projects) · free M+ & raid player lookups at [voidscout.io](https://voidscout.io) · more at [tinkerline.io](https://tinkerline.io) · [Discord](https://discord.gg/7ZHmx7zMDh)*
+*Part of the Void addon family by Vede · GPL-3.0 licensed · [Source & bug reports](https://github.com/bughatti/voidsweep) · [All Void addons](https://www.curseforge.com/members/bughatti/projects) · free M+ & raid player lookups at [voidscout.io](https://voidscout.io) · more at [tinkerline.io](https://tinkerline.io/addons/voidsweep/) · [Discord](https://discord.gg/7ZHmx7zMDh)*

@@ -136,6 +136,41 @@ local function share(e, name, dead, layer)
     end
 end
 
+----------------------------------------------------------------------
+-- Rares in dungeons and raids (the user, 2026-11-11: "will voidsweep see rares in dungeons" /
+-- "some rare scanners say they can" / "yes add the dungeon alert"). Inside, the game gives no
+-- map position, so the spot matching below can't work, and every group has its own copy, so
+-- there's nothing to share. What works anywhere is the nameplate / target / mouseover itself:
+-- a sound and "<name> is here" in the middle of the screen and in chat, once per rare per run.
+-- VoidGPS does the same everywhere (its rare popup): with its rare alerts on, it speaks and
+-- VoidSweep stays quiet, so a rare never gets two alerts.
+----------------------------------------------------------------------
+local runSeen, runKey = {}, nil   -- [name] = true: alerted in this run
+local function inDungeon()
+    local inInst, t = IsInInstance()
+    return inInst and (t == "party" or t == "raid")
+end
+local function gpsAlerts()
+    local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("VoidGPS")
+    return loaded and not (VoidGPSDB and VoidGPSDB.rareAlerts == false)
+end
+local function dungeonAlert(unit, name, cls)
+    if UnitIsDead(unit) or gpsAlerts() then return end
+    local cfg = VS.Config and VS:Config()
+    if cfg and cfg.show and cfg.show.rare == false then return end   -- rares hidden in the map menu
+    -- a new run: another dungeon, or the same one again after leaving (runKey is cleared
+    -- outside; the instance ID alone is the same for every run of a dungeon)
+    local key = select(8, GetInstanceInfo()) or 0
+    if key ~= runKey then runKey, runSeen = key, {} end
+    if runSeen[name] then return end
+    runSeen[name] = true
+    local lv = UnitLevel(unit)
+    local what = (cls == "rareelite" and "rare elite" or "rare") .. ((lv and lv > 0) and (", level " .. lv) or "")
+    PlaySound(SOUNDKIT.RAID_WARNING)
+    UIErrorsFrame:AddMessage(name .. " is here! (" .. what .. ")", 0.2, 1, 0.2)
+    DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is here|r (%s)."):format(name, what))
+end
+
 local function check(unit)
     if not UnitExists(unit) then return end
     local cls = UnitClassification(unit)
@@ -143,6 +178,7 @@ local function check(unit)
     if not UnitCanAttack("player", unit) then return end
     local name = UnitName(unit)
     if not name or (issecretvalue and issecretvalue(name)) then return end
+    if inDungeon() then dungeonAlert(unit, name, cls); return end
     local mapID, x, y = playerPos()
     if not mapID then return end
     local e, d = match(name, mapID, x, y)
@@ -204,8 +240,11 @@ f:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 f:RegisterEvent("PLAYER_TARGET_CHANGED")
 f:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 f:RegisterEvent("UNIT_HEALTH")
+f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:SetScript("OnEvent", function(_, event, unit)
-    if event == "NAME_PLATE_UNIT_ADDED" then check(unit)
+    if event == "PLAYER_ENTERING_WORLD" then
+        if not inDungeon() then runKey = nil end   -- out: the next time in is a new run
+    elseif event == "NAME_PLATE_UNIT_ADDED" then check(unit)
     elseif event == "PLAYER_TARGET_CHANGED" then check("target")
     elseif event == "UPDATE_MOUSEOVER_UNIT" then check("mouseover")
     elseif event == "UNIT_HEALTH" and unit == "target" and UnitIsDead("target") then

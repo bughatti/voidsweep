@@ -1,5 +1,14 @@
 # VoidSweep Changelog
 
+## 0.2.31 — 2026-11-12
+
+- **Fixed: any chair counted as a Camp Chair** (an inn chair, the chairs in Scarlet Monastery). A chair counts only at a campfire now; a real Camp Chair is still always recognized.
+- **Fixed: the campfire box popped up inside a dungeon** (a group member's campfire). It stays out of dungeons and raids now; hovering a camp item there still shows its verdict in the tooltip.
+- **Rares in dungeons and raids:** a rare or rare elite you see on a nameplate, your target or your mouseover now plays a sound and says "<name> is here!", once per rare per run (no map pin, nothing shared: every group has its own copy). With VoidGPS's rare alerts on, VoidGPS speaks instead, so it's never twice.
+- **WoW Forever:** the addon list no longer calls VoidSweep a Midnight radar; it works on WoW Forever too.
+- **The players-here box:** its tooltip no longer covers the box while you drag it, and it opens above or below the box depending on where the box sits on screen.
+- **Void hub button:** left-click opens one panel with all your Void addons by name, grouped, each with its own on/off switches (it replaces the ring of icons), with a background slider. The hub's info window now stays where you put it.
+
 ## 0.2.30
 
 - **WoW Forever: sharing per faction** (the network VoidSweep shares with VoidGather and VoidLayer). Messages to the other faction never arrived and the players box counted them; Horde and Alliance now each have their own channel. `/vsw net` shows bounced whispers. Older versions stay on the old channel: please update.

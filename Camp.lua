@@ -66,6 +66,7 @@ local function on() return VS:Config().campBox ~= false end
 -- What an object is
 ----------------------------------------------------------------------
 -- From a GUID (object or creature) or, failing that, an English object name.
+local GENERIC_NAMES = { Chair = true }   -- names ordinary world objects have too
 local function identify(guid, name)
     if type(guid) == "string" and readable(guid) then
         local e = guid:match("^GameObject%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
@@ -76,6 +77,13 @@ local function identify(guid, name)
         if c and CD.creatures[c] then return CD.creatures[c], c end
     end
     if type(name) == "string" and readable(name) then
+        -- a plain "Chair" is every chair in the game (inns, a Scarlet Monastery chair popped the box
+        -- up as a Camp Chair, the user, 2026-11-11): by name only while you're at a campfire (its
+        -- aura). A real Camp Chair is always known by its object ID above.
+        if GENERIC_NAMES[name] then
+            local ok, a = pcall(C_UnitAuras.GetPlayerAuraBySpellID, 1283391)   -- CAMP_AURA
+            if not (ok and a) then return nil end
+        end
         local loc = GetLocale()
         local id = CD.names[loc] and CD.names[loc][name]
         if id and CD.objects[id] then return CD.objects[id], id end
@@ -427,8 +435,15 @@ local function movingOn()
     return (UnitOnTaxi and UnitOnTaxi("player")) or (IsFlying and IsFlying()) or (IsMounted and IsMounted())
 end
 
+-- Not inside dungeons and raids: a group member's campfire there popped the box up mid-run (the
+-- user, 2026-11-11, Scarlet Monastery: "just got a camp fire buff popup in a dungeon").
+local function inDungeon()
+    local inInst, t = IsInInstance()
+    return inInst and (t == "party" or t == "raid")
+end
+
 function C:Refresh()
-    if not (on() and forever()) then if box then box:Hide() end return end
+    if not (on() and forever()) or inDungeon() then if box then box:Hide() end return end
     local list, atCamp = here()
     -- Left the fire on a mount / flight: done with this camp right away (the user, 2026-11-09:
     -- "im flying and had to close it far away"). Forget its items so they don't hold the box up;
@@ -584,7 +599,7 @@ ev:SetScript("OnEvent", function(_, event, _, newGuid)
             TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, onTooltip)
         end
     elseif event == "PLAYER_SOFT_INTERACT_CHANGED" then
-        if not (forever() and on()) then return end
+        if not (forever() and on()) or inDungeon() then return end
         local obj, id = identify(newGuid)
         if obj then note(newGuid, obj, id) end
     elseif event == "UNIT_AURA" then
