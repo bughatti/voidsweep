@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.32 — 2026-11-12
+
+- **Fixed: a side of a box could be missing**, e.g. the right line of the recipes box and its buttons when the game window is an odd number of pixels wide. Every Void box now always shows all four border lines.
+
 ## 0.2.31 — 2026-11-12
 
 - **Fixed: any chair counted as a Camp Chair** (an inn chair, the chairs in Scarlet Monastery). A chair counts only at a campfire now; a real Camp Chair is still always recognized.
