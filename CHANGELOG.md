@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.33 — 2026-11-14
+
+- **WoW Forever layers:** the layer network VoidSweep shares with VoidLayer got VoidLayer 0.2.0's update: layer names are the same for everyone ("Layer 98"), and your layer is read again right after the game's world refresh moves you (it kept showing the old one for up to 3 minutes).
+
 ## 0.2.32 — 2026-11-12
 
 - **Fixed: a side of a box could be missing**, e.g. the right line of the recipes box and its buttons when the game window is an odd number of pixels wide. Every Void box now always shows all four border lines.

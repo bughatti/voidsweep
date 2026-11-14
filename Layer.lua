@@ -15,8 +15,10 @@
 --   ns.Layer:OnChange(fn)    fn(pair, zone) when your layer changes
 --
 -- Read from nameplates, your target and your mouseover; players and their pets,
--- totems and summons are skipped. Readings reset when your group changes or you
--- change zone, since either can move you. Nothing is saved or sent. Forever only.
+-- totems and summons are skipped. Readings reset when your group changes, you
+-- change zone, or the game's "world refresh" moves you (SHARD_TRANSFER, measured
+-- 2026-11-14: Stonetalon 6831-95 -> 7051-96 solo, no zone change; without the reset
+-- the old pair kept the majority and VoidLayer showed it). Nothing is saved or sent. Forever only.
 --
 -- Copied as-is into each addon that uses it (source of truth: wow-addons/_shared/Layer.lua).
 ----------------------------------------------------------------------
@@ -125,7 +127,7 @@ function L:OnChange(fn) listeners[#listeners + 1] = fn end
 
 local f = CreateFrame("Frame")
 for _, ev in ipairs({ "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT",
-                      "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD" }) do
+                      "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "PLAYER_ENTERING_WORLD", "SHARD_TRANSFER" }) do
     pcall(f.RegisterEvent, f, ev)
 end
 local lastGroup

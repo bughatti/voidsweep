@@ -21,6 +21,8 @@
 --   3. The hop:               HR:1:zone:pair:nonce   "please invite me"  (to a host)
 --                             HA:1:nonce:ok|no:why   then the host invites you
 --                             HS:1:nonce             "I'm staying grouped"
+--   4. One layer, many zones:  L:1:0:zoneA:pairA:zoneB:pairB:age   never relayed; a solo zone
+--                             crossing showed both ids are one layer, age s ago (section 4)
 --     You accept only the invite from the host you asked, while asking; check your layer
 --     changed; leave (or stay, if leaving sent you back once). One hop every 5 minutes.
 -- Hosting is ON unless turned off (the user, 11-09: a hop only works when someone hosts).
@@ -37,7 +39,8 @@
 local ADDON, ns = ...
 -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
 -- 3: one channel per faction, so this core must win over an older copy's both-factions one (2026-11-10)
-local CORE_VERSION = 3
+-- 4: layer names from the layer's own number, the same for every player (2026-11-14)
+local CORE_VERSION = 4
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -247,23 +250,34 @@ function ns.LayerCoreBuild(owner)
     end
 
     ------------------------------------------------------------------
-    -- Layer names: "Layer A", "Layer B" in the order you met them this session (per zone).
-    -- The raw id ("7053-17") shows in tooltips.
+    -- Layer names, the same for every player: the layer's own number, the part after the dash
+    -- ("6829-98" -> "Layer 98"). Until 2026-11-14 they were letters in the order YOU met them
+    -- this session, so the same layer was "B" for the user and "G" for a guildie who had just
+    -- swapped them (the user: "mine still said b"). Two layers in one zone with the same number
+    -- (another server) both show the full id ("Layer 6829-98"). The full id shows in tooltips.
     ------------------------------------------------------------------
-    local labels = {}   -- [zone] = { [pair] = "A" }, n
+    local known = {}   -- [zone] = { [pair] = true }: the pairs met in that zone, to spot a shared number
     function C:Label(zone, pair)
-        if not (zone and validPair(pair)) then return pair or "?" end
-        local z = labels[zone]
-        if not z then z = { n = 0 }; labels[zone] = z end
-        if not z[pair] then
-            z.n = z.n + 1
-            z[pair] = z.n <= 26 and string.char(64 + z.n) or tostring(z.n)
+        if not validPair(pair) then return pair or "?" end
+        local slot = pair:match("%-(%d+)$")
+        if zone then
+            local z = known[zone]
+            if not z then z = {}; known[zone] = z end
+            z[pair] = true
+            for other in pairs(z) do
+                if other ~= pair and other:match("%-(%d+)$") == slot then return "Layer " .. pair end
+            end
         end
-        return "Layer " .. z[pair]
+        return "Layer " .. slot
     end
     function C:Here() return Layer:Here() end
     function C:Current(zone) return Layer:Current(zone) end
     function C:Zone(mapID) return Layer:Zone(mapID) end
+
+    -- Section 4 (one layer, many zones) fills these in; the census, rares and messages call them.
+    local noteSeen = function() end   -- (zone, pair): a Void player saw this layer in this zone
+    local onLink, shareLinks          -- a link from a message; links to hand an asker
+    local linkSharedTo = {}           -- [asker] = GetTime() we last handed them links
 
     ------------------------------------------------------------------
     -- 1. Who's on which layer
@@ -345,6 +359,7 @@ function ns.LayerCoreBuild(owner)
     local offerRare   -- defined with the hop
 
     local function storeRare(zone, pair, npc, hp, x, y, origin, name, test)
+        noteSeen(zone, pair)
         local key = origin .. ":" .. npc
         local old = rares[key]
         -- dead stays dead: a late "alive" (relayed slower) doesn't bring it back (Sol review)
@@ -679,6 +694,11 @@ function ns.LayerCoreBuild(owner)
             if seenQ[key] then return end
             seenQ[key] = now()
             if ttl > 0 then relay(("Q:1:%d:%d:%s:%s"):format(ttl - 1, zone, nonce, asker), ttl, who, asker) end
+            -- the layer links we know for that zone, wherever we stand (section 4), once per asker per ASK_CD
+            if shareLinks and not (linkSharedTo[asker] and now() - linkSharedTo[asker] < ASK_CD) then
+                linkSharedTo[asker] = now()
+                shareLinks(asker, zone)
+            end
             if IsInInstance() then return end
             local cur, here = Layer:Here()
             if not cur or here ~= zone then return end
@@ -693,6 +713,7 @@ function ns.LayerCoreBuild(owner)
             census[zone] = census[zone] or {}
             census[zone][who] = { pair = pair, host = h == "1", t = now() }
             C:Label(zone, pair)
+            noteSeen(zone, pair)
             changed()
         elseif tag == "R" then
             local ttl, zoneS, pair, npc, hp, x, y, origin, name =
@@ -709,6 +730,14 @@ function ns.LayerCoreBuild(owner)
                 C:Label(zone, pair)
                 if hp > 0 then offerRare(name, zone, pair, origin, x, y, npc) end
             end
+        elseif tag == "L" then
+            -- one layer's ids in two zones (section 4): the sender vouches for it, seen `age` s ago;
+            -- never relayed (a griefer's word reaches only who they whisper)
+            local za, pa, zb, pb, age = msg:match("^L:1:0:(%d+):(%d+%-%d+):(%d+):(%d+%-%d+):(%d+)$")
+            za, zb, age = validZone(za), validZone(zb), tonumber(age)
+            if not (za and zb and za ~= zb and validPair(pa) and validPair(pb) and age and age <= 3 * 3600) then return end
+            if not isPeer(who) or not onLink then return end
+            onLink(za, pa, zb, pb, who, now() - age)
         elseif tag == "HR" then
             local zoneS, pair, nonce = msg:match("^HR:1:(%d+):(%d+%-%d+):(%d+)$")
             if not (nonce and validPair(pair)) or not isPeer(who) then return end
@@ -752,10 +781,20 @@ function ns.LayerCoreBuild(owner)
     local lastPopup
     offerRare = function(name, zone, pair, origin, x, y, npc)
         local cur, here = Layer:Here()
-        if here ~= zone or not cur then return end
+        if not cur then return end
         -- once per rare (by NPC id when known: a name is whatever the message says, Sol review)
         local okey = tostring(npc or name) .. "@" .. zone
         if offered[okey] and now() - offered[okey] < OFFER_GAP then return end
+        if here ~= zone then
+            -- another zone, but YOUR layer there (section 4's links): walk over, no hop
+            if owner.addon == "VoidLayer" and C:PopupsOn() and C.OnMyLayer and C:OnMyLayer(zone, pair) == true then
+                offered[okey] = now()
+                local info = C_Map.GetMapInfo(zone)
+                local at = (x > 0 or y > 0) and (" near %.0f, %.0f"):format(x / 10, y / 10) or ""
+                say(("|cffffd200%s|r is up in %s%s, on your layer: walk over, no hop needed."):format(name, info and info.name or "the next zone", at))
+            end
+            return
+        end
         if cur == pair then
             if owner.addon == "VoidLayer" and C:PopupsOn() then
                 offered[okey] = now()
@@ -782,6 +821,344 @@ function ns.LayerCoreBuild(owner)
         end
         offerRare(name, zone, pair, nil, 0, 0)
     end
+
+    ------------------------------------------------------------------
+    -- 4. Your layer, zone to zone (2026-11-14). Each zone gives you its own id: five solo crossings
+    -- Barrens <-> Ashenvale were ALWAYS Barrens 6831-88 / Ashenvale 6829-98 (VoidDev's log), and
+    -- a world refresh changes only the zone you're in (Ashenvale 98 -> 100, the Barrens stayed 88).
+    -- So the game keeps YOUR id per zone: a SOLO crossing with no refresh, no loading screen and no
+    -- hop links your two ids:
+    --   L:1:0:zoneA:pairA:zoneB:pairB:age    age = seconds since the crossing that showed it
+    -- Sent to a few Void players, never relayed. Every message is hostile (Sol review, 11-14), so:
+    --   * only your own crossings are sure ("your layer, walk over"); another player's link is true
+    --     for THEM, so it's a hint, however many send it; only your own links are passed on (to a
+    --     census asker, with their age)
+    --   * a link keeps the time it was SEEN, not received, so passing it around doesn't renew it;
+    --     it ages out after LINK_LIVE (ids get reused)
+    --   * a layer has one id per zone: your own crossing replaces a different id in that zone, and
+    --     a zone the links give two ids for is left out (contradiction = say nothing)
+    -- What you get: your layer's ids in other zones, a rare next door on YOUR layer ("walk over"),
+    -- and the layers Void players have seen in a zone lately (readings, answers, rares, links).
+    ------------------------------------------------------------------
+    local LINK_LIVE    = 3 * 3600   -- a link counts this long after the crossing that showed it
+    local LINK_FANOUT  = 6
+    local LINK_SHARE   = 4          -- links handed to an asker
+    local LINK_MAX     = 400        -- ids kept
+    local BY_MAX       = 8          -- reporters kept per link
+    local CROSS_GAP    = 90         -- the old zone's layer was read at most this long before the new one
+    local LINK_CONFIRM = 10         -- the new zone's id has to hold this long (a border NPC can be read first)
+    local SEEN_WINDOW  = 1800       -- "layers seen in this zone": the last 30 minutes
+
+    -- [node][node] = { own = t, by = { [player] = t } }, both ways; node = "zone:pair"; t = when seen
+    local links = {}
+    local seenIds = {}   -- [zone][pair] = t
+    local function node(zone, pair) return zone .. ":" .. pair end
+    local function unnode(k) local z, p = k:match("^(%d+):(%d+%-%d+)$"); return tonumber(z), p end
+
+    local function edgeTime(e)
+        -- not 0: GetTime() is seconds since the game started, so a link seen before that is negative
+        local t = e.own or -math.huge
+        for _, bt in pairs(e.by) do if bt > t then t = bt end end
+        return t
+    end
+    local function alive(e) return now() - edgeTime(e) <= LINK_LIVE end
+    -- the time of your own crossing: what gets passed on (only your own links are), so passing a
+    -- link around never renews it (Sol review)
+    local function sureTime(e) return e.own or -math.huge end
+    -- Sure = YOUR OWN crossing only (live 11-14: a refresh moved Ashenvale 98 -> 100 while the
+    -- Barrens stayed 88, so the game keeps each player's id per zone; another player's crossing is
+    -- true for them, not necessarily for you, however many agree). Others' links are hints.
+    local function sure(e)
+        return e.own ~= nil and now() - e.own <= LINK_LIVE
+    end
+
+    -- t = when it was seen (a link's crossing time, not when the message came; Sol review)
+    noteSeen = function(zone, pair, t)
+        if not (zone and validPair(pair)) then return end
+        t = math.min(t or now(), now())
+        if now() - t > SEEN_WINDOW then return end
+        local z = seenIds[zone]
+        if not z then z = {}; seenIds[zone] = z end
+        z[pair] = math.max(z[pair] or -math.huge, t)
+    end
+
+    local function dropNode(k)
+        for b in pairs(links[k] or {}) do if links[b] then links[b][k] = nil end end
+        links[k] = nil
+    end
+    local function pruneLinks()
+        local n = 0
+        for a, t in pairs(links) do
+            for b, e in pairs(t) do
+                for who, bt in pairs(e.by) do if now() - bt > LINK_LIVE then e.by[who] = nil end end
+                if e.own and now() - e.own > LINK_LIVE then e.own = nil end
+                if not e.own and not next(e.by) then t[b] = nil end
+            end
+            if next(t) then n = n + 1 else links[a] = nil end
+        end
+        -- too many ids (a flood): drop the stalest
+        while n > LINK_MAX do
+            local oldK, oldT
+            for a, t in pairs(links) do
+                for _, e in pairs(t) do local et = edgeTime(e); if not oldT or et < oldT then oldK, oldT = a, et end end
+            end
+            if not oldK then break end
+            dropNode(oldK)
+            n = n - 1
+        end
+        for zone, z in pairs(seenIds) do
+            for p, t in pairs(z) do if now() - t > SEEN_WINDOW then z[p] = nil end end
+            if not next(z) then seenIds[zone] = nil end
+        end
+    end
+
+    -- A link between a's id in its zone and b's. who = nil: your own crossing (sure, and it replaces
+    -- any other id for that zone); else the player who sent it, seen at time t. True when it's new.
+    local function addLink(za, pa, zb, pb, who, t)
+        if za == zb or not (validPair(pa) and validPair(pb)) then return false end
+        t = math.min(t or now(), now())
+        local a, b = node(za, pa), node(zb, pb)
+        local function put(x, y, zy)
+            local tx = links[x]
+            if not tx then tx = {}; links[x] = tx end
+            if not who then
+                -- what you saw yourself wins: another id for that zone is stale or wrong
+                for k in pairs(tx) do
+                    if k ~= y and unnode(k) == zy then
+                        tx[k] = nil
+                        if links[k] then links[k][x] = nil end
+                    end
+                end
+            end
+            local e = tx[y]
+            local was = e ~= nil
+            if not e then e = { by = {} }; tx[y] = e end
+            if who then
+                e.by[who] = math.max(e.by[who] or -math.huge, t)   -- not 0: times can be negative (edgeTime)
+                local n, oldW, oldT = 0, nil, nil
+                for w, bt in pairs(e.by) do n = n + 1; if not oldT or bt < oldT then oldW, oldT = w, bt end end
+                if n > BY_MAX and oldW then e.by[oldW] = nil end
+            else
+                e.own = t
+            end
+            return not was
+        end
+        local fresh = put(a, b, zb)
+        put(b, a, za)
+        noteSeen(za, pa, t); noteSeen(zb, pb, t)
+        if fresh then changed() end
+        return fresh
+    end
+    onLink = function(za, pa, zb, pb, who, t) return addLink(za, pa, zb, pb, who, t) end
+
+    -- ids reachable from start over live links (sure ones only, or all), never through a bad id
+    -- (the whole store fits: LINK_MAX ids; cut short = second return true, then nothing is sure)
+    local function reach(start, sureOnly, bad)
+        local seen, queue, n = { [start] = true }, { start }, 0
+        while #queue > 0 and n < LINK_MAX * 2 do
+            local k = table.remove(queue, 1)
+            for o, e in pairs(links[k] or {}) do
+                if not seen[o] and not (bad and bad[o]) and alive(e) and (not sureOnly or sure(e)) then
+                    seen[o] = true
+                    queue[#queue + 1] = o
+                    n = n + 1
+                end
+            end
+        end
+        return seen, #queue > 0
+    end
+
+    -- This layer's ids in other zones: { { zone, pair, sure }, ... }. sure = every link on the way
+    -- is your own crossing (others' links: hints); a zone with two ids is left out.
+    function C:SameLayer(zone, pair)
+        local out = {}
+        if not (zone and validPair(pair)) then return out end
+        local start = node(zone, pair)
+        -- a zone the links give two ids for (one of them may be your own zone) is a contradiction:
+        -- those ids are bad, and nothing is followed THROUGH them either (Sol review: a stale branch
+        -- could still certify a zone further on). Repeat until no new contradiction shows up.
+        -- One SURE id against unsure ones: the unsure ones go (one griefer can't silence a zone).
+        local bad, cut, settled = {}, false, false
+        for _ = 1, 5 do
+            local allSet, c1 = reach(start, false, bad)
+            local sureSet, c2 = reach(start, true, bad)
+            cut = cut or c1 or c2
+            local perZone, grew = {}, false
+            for k in pairs(allSet) do
+                local z = unnode(k)
+                if z then perZone[z] = perZone[z] or {}; perZone[z][#perZone[z] + 1] = k end
+            end
+            for z, ks in pairs(perZone) do
+                if #ks > 1 or (z == zone and ks[1] ~= start) then
+                    local sures = {}
+                    for _, k in ipairs(ks) do if sureSet[k] and k ~= start then sures[#sures + 1] = k end end
+                    local keep = (z ~= zone and #sures == 1) and sures[1] or nil
+                    for _, k in ipairs(ks) do
+                        if k ~= start and k ~= keep and not bad[k] then bad[k] = true; grew = true end
+                    end
+                end
+            end
+            if not grew then settled = true break end
+        end
+        local sureSet, c1 = reach(start, true, bad)
+        local allSet, c2 = reach(start, false, bad)
+        -- cut short (a flood) or still contradicting after 5 rounds: show what's there, none of it sure
+        local trust = settled and not (cut or c1 or c2)
+        for k in pairs(allSet) do
+            local z, p = unnode(k)
+            if z and z ~= zone then out[#out + 1] = { zone = z, pair = p, sure = trust and sureSet[k] and true or false } end
+        end
+        return out
+    end
+
+    -- Is that zone's id your layer? true (your own crossing), "maybe" (another player's link), or false
+    function C:OnMyLayer(zone, pair)
+        local cur, here = Layer:Here()
+        if not (cur and here) then return false end
+        if here == zone then return cur == pair end
+        for _, x in ipairs(self:SameLayer(here, cur)) do
+            if x.zone == zone and x.pair == pair then return x.sure and true or "maybe" end
+        end
+        return false
+    end
+
+    -- Rares up in OTHER zones on your layer (your own crossings only), newest first (C:Rares fields + nextDoor)
+    function C:RaresNextDoor()
+        local cur, here = Layer:Here()
+        if not (cur and here) then return {} end
+        local mine = {}
+        for _, x in ipairs(self:SameLayer(here, cur)) do mine[node(x.zone, x.pair)] = x.sure end
+        local out = {}
+        if not next(mine) then return out end
+        for _, r in ipairs(self:Rares()) do
+            local s = mine[node(r.zone, r.pair)]
+            if r.zone ~= here and r.hp > 0 and s == true then
+                r.nextDoor, r.sure = true, s
+                out[#out + 1] = r
+            end
+        end
+        return out
+    end
+
+    -- Layers Void players have seen in a zone in the last 30 minutes: count, { pair = t }
+    function C:LayersSeen(zone)
+        local list, n = {}, 0
+        for p, t in pairs(seenIds[zone] or {}) do
+            if now() - t <= SEEN_WINDOW then list[p] = t; n = n + 1 end
+        end
+        return n, list
+    end
+
+    -- links to hand an asker in a zone: the freshest SURE ones with an end there, with their age
+    shareLinks = function(asker, zone)
+        local picks = {}
+        for a, t in pairs(links) do
+            local za, pa = unnode(a)
+            if za == zone then
+                for b, e in pairs(t) do
+                    local zb, pb = unnode(b)
+                    if zb and alive(e) and sure(e) then picks[#picks + 1] = { za, pa, zb, pb, sureTime(e) } end
+                end
+            end
+        end
+        table.sort(picks, function(x, y) return x[5] > y[5] end)
+        for i = 1, math.min(LINK_SHARE, #picks) do
+            local p = picks[i]
+            send(("L:1:0:%d:%s:%d:%s:%d"):format(p[1], p[2], p[3], p[4], math.floor(now() - p[5])), asker, false)
+        end
+    end
+
+    -- Your own crossings. trail = where your layer was last confirmed (every 5 s, solo only); a new
+    -- zone's first id within CROSS_GAP of it, with nothing in between that moves you, is the same layer.
+    local trail
+    local lastGroupT, lastTaintT, lastZoneT, cancelT = 0, 0, 0, 0
+    -- A world refresh may move you until refreshUntil (its countdown + a minute): no links before then.
+    -- Set from the game's own countdown, so a /reload or a zone change during it keeps it (Sol review).
+    local refreshUntil = 0
+    -- only ever moves it later: no countdown (or none given) keeps what we had (Sol review);
+    -- a cancel ends it, and an expired one simply passes
+    local function readCountdown()
+        local left = GetEvictionTimeRemaining and GetEvictionTimeRemaining()
+        if type(left) == "number" and left > 0 then refreshUntil = math.max(refreshUntil, now() + left + 60) end
+    end
+    readCountdown()
+    C_Timer.NewTicker(5, function()
+        pruneLinks()
+        if IsInInstance() or IsInGroup() then trail = nil return end
+        local cur, zone = Layer:Here()
+        if cur and zone then
+            trail = { zone = zone, pair = cur, t = now() }
+            noteSeen(zone, cur)
+        end
+    end)
+    -- solo only: in a group, a leader change can move you without the group's size changing (Sol review)
+    local function clean(since)
+        return lastGroupT < since and lastTaintT < since and not state and now() >= refreshUntil and not IsInGroup()
+    end
+    -- Your id in a zone is `pair` now: your own links to any OTHER id of that zone are stale (a refresh
+    -- moved you there: Ashenvale 98 -> 100). They stop being sure; what others sent stays a hint (Sol review).
+    local function forgetOwn(zone, pair)
+        local keep = node(zone, pair)
+        for k, t in pairs(links) do
+            if k ~= keep and unnode(k) == zone then
+                for o, e in pairs(t) do
+                    if e.own then
+                        e.own = nil
+                        local back = links[o] and links[o][k]
+                        if back then back.own = nil end
+                        if not next(e.by) then
+                            t[o] = nil
+                            if links[o] then links[o][k] = nil end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    Layer:OnChange(function(pair, zone)
+        noteSeen(zone, pair)
+        if zone and validPair(pair) and not IsInInstance() then forgetOwn(zone, pair) end
+        local tr = trail
+        if not (tr and zone and validPair(pair)) or zone == tr.zone or IsInInstance() then return end
+        trail = { zone = zone, pair = pair, t = now() }
+        local since = tr.t - 1
+        if now() - tr.t > CROSS_GAP or not clean(since) then return end
+        C_Timer.After(LINK_CONFIRM, function()
+            if Layer:Current(zone) ~= pair or not clean(since) then return end
+            if addLink(tr.zone, tr.pair, zone, pair) then
+                sendAll(("L:1:0:%d:%s:%d:%s:0"):format(tr.zone, tr.pair, zone, pair), targets(LINK_FANOUT, zone), false)
+            end
+        end)
+    end)
+    local lf = CreateFrame("Frame")
+    for _, ev in ipairs({ "SHARD_TRANSFER_IMMINENT", "SHARD_TRANSFER_CANCELLED", "SHARD_TRANSFER",
+                          "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE", "PARTY_LEADER_CHANGED", "PLAYER_ENTERING_WORLD" }) do
+        pcall(lf.RegisterEvent, lf, ev)
+    end
+    lf:SetScript("OnEvent", function(_, ev)
+        if ev == "SHARD_TRANSFER_IMMINENT" then
+            readCountdown()
+            if refreshUntil < now() then refreshUntil = now() + 660 end   -- no countdown given: the usual 10 min
+        elseif ev == "SHARD_TRANSFER_CANCELLED" then
+            refreshUntil, cancelT = 0, now()   -- "Refresh Now" cancels the countdown, then moves you
+        elseif ev == "SHARD_TRANSFER" then
+            -- every zone change fires it too and keeps your layer (live 11-14); a world refresh moves
+            -- you: one announced, one just cancelled by Refresh Now, or one far from a zone change
+            if now() < refreshUntil or now() - cancelT < 5 or now() - lastZoneT > 15 then lastTaintT = now() end
+            if now() - lastZoneT > 15 then
+                refreshUntil = 0   -- not a zone change: that WAS the refresh (the move itself is tainted above)
+            else
+                readCountdown()    -- a zone change during the countdown leaves it running
+            end
+        elseif ev == "ZONE_CHANGED_NEW_AREA" then
+            lastZoneT = now()
+        elseif ev == "PLAYER_ENTERING_WORLD" then
+            lastTaintT = now()   -- a login, /reload or loading screen (boat, zeppelin, portal)
+        else
+            lastGroupT = now()   -- any roster or leader change
+        end
+    end)
 
     ------------------------------------------------------------------
     -- Tests (/vl test ...): each half of a hop with a player who doesn't run VoidLayer and
@@ -941,6 +1318,7 @@ function ns.LayerCoreBuild(owner)
         for k, t in pairs(offered) do if now() - t > OFFER_GAP then offered[k] = nil end end
         for k, s in pairs(sentRare) do if now() - s.t > RARE_RESEND then sentRare[k] = nil end end
         for k, b in pairs(bucket) do if now() - b.start > 60 then bucket[k] = nil end end
+        for k, t in pairs(linkSharedTo) do if now() - t > ASK_CD then linkSharedTo[k] = nil end end
     end)
 
     -- join a little after login (VoidSweep 14 s, VoidGather earlier), then read the members
