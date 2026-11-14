@@ -23,6 +23,8 @@
 --                             HS:1:nonce             "I'm staying grouped"
 --   4. One layer, many zones:  L:1:0:zoneA:pairA:zoneB:pairB:age   never relayed; a solo zone
 --                             crossing showed both ids are one layer, age s ago (section 4)
+--   5. Fresh camp:            C:1:zone:pair:cx:cy:age   never relayed; a pack died around a Void
+--                             player at that grid cell on that layer, age s ago (section 5)
 --     You accept only the invite from the host you asked, while asking; check your layer
 --     changed; leave (or stay, if leaving sent you back once). One hop every 5 minutes.
 -- Hosting is ON unless turned off (the user, 11-09: a hop only works when someone hosts).
@@ -40,7 +42,7 @@ local ADDON, ns = ...
 -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
 -- 3: one channel per faction, so this core must win over an older copy's both-factions one (2026-11-10)
 -- 4: layer names from the layer's own number, the same for every player (2026-11-14)
-local CORE_VERSION = 4
+local CORE_VERSION = 5   -- 5 (2026-11-14): layer = server number only (canon)
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -101,6 +103,8 @@ function ns.LayerCoreBuild(owner)
     local function now() return GetTime() end
     local function secret(v) return issecretvalue and issecretvalue(v) end
     local function validPair(p) return type(p) == "string" and #p <= 20 and p:match("^%d+%-%d+$") ~= nil end
+    -- only the server number is the layer (Layer.lua L.Canon, 2026-11-14): "6832-125" -> "6832-0"
+    local function canon(p) local s = type(p) == "string" and p:match("^(%d+)%-%d+$"); return s and (s .. "-0") or p end
     local function validName(n) return type(n) == "string" and n ~= "" and #n <= 48 and not n:find("[|:]") end
     local function validZone(z) z = tonumber(z); return z and z > 0 and C_Map.GetMapInfo(z) and z or nil end
 
@@ -214,6 +218,12 @@ function ns.LayerCoreBuild(owner)
 
     -- k targets: players we know are in this zone first, then random members.
     local census = {}   -- [zone] = { [name] = { pair, host, t } }
+    -- a player's id as THEY sent it (older versions: "<server>-<their own number>"): a hop request
+    -- to them must carry it, or they answer "not my layer" (Sol review 2026-11-14). [name] = raw id
+    local rawOf = {}
+    local function noteRaw(name, raw)
+        if type(raw) == "string" and validName(name) and (not raw:match("%-0$") or not rawOf[name]) then rawOf[name] = raw end
+    end
     local function targets(k, zone, skip)
         net:RequestRoster()
         local out, used = {}, { [me or ""] = true }
@@ -250,25 +260,16 @@ function ns.LayerCoreBuild(owner)
     end
 
     ------------------------------------------------------------------
-    -- Layer names, the same for every player: the layer's own number, the part after the dash
-    -- ("6829-98" -> "Layer 98"). Until 2026-11-14 they were letters in the order YOU met them
-    -- this session, so the same layer was "B" for the user and "G" for a guildie who had just
-    -- swapped them (the user: "mine still said b"). Two layers in one zone with the same number
-    -- (another server) both show the full id ("Layer 6829-98"). The full id shows in tooltips.
+    -- Layer names, the same for every player. Until 2026-11-14 they were letters in the order YOU
+    -- met them (the user "B", a guildie on the same layer "G"), then the number after the dash
+    -- ("6829-98" -> "Layer 98"). That number turned out PER PLAYER (2026-11-14, two players on one
+    -- layer, same grunt: the user 125, his son 3); only the server number is the layer. Names are
+    -- now that number ("6832-0" -> "Layer 6832"), the same for everyone on it (Layer.lua, L.Canon).
     ------------------------------------------------------------------
-    local known = {}   -- [zone] = { [pair] = true }: the pairs met in that zone, to spot a shared number
     function C:Label(zone, pair)
+        pair = canon(pair)
         if not validPair(pair) then return pair or "?" end
-        local slot = pair:match("%-(%d+)$")
-        if zone then
-            local z = known[zone]
-            if not z then z = {}; known[zone] = z end
-            z[pair] = true
-            for other in pairs(z) do
-                if other ~= pair and other:match("%-(%d+)$") == slot then return "Layer " .. pair end
-            end
-        end
-        return "Layer " .. slot
+        return "Layer " .. pair:match("^(%d+)")
     end
     function C:Here() return Layer:Here() end
     function C:Current(zone) return Layer:Current(zone) end
@@ -277,6 +278,7 @@ function ns.LayerCoreBuild(owner)
     -- Section 4 (one layer, many zones) fills these in; the census, rares and messages call them.
     local noteSeen = function() end   -- (zone, pair): a Void player saw this layer in this zone
     local onLink, shareLinks          -- a link from a message; links to hand an asker
+    local onCamp                      -- section 5: a camp cleared, from a message
     local linkSharedTo = {}           -- [asker] = GetTime() we last handed them links
 
     ------------------------------------------------------------------
@@ -394,7 +396,7 @@ function ns.LayerCoreBuild(owner)
         if not npc or secret(name) or not validName(name) then return end
         local zone = Layer:Zone(C_Map.GetBestMapForUnit("player"))
         if not zone then return end
-        local pair = Layer:Current(zone) or (server and shard and server .. "-" .. shard)
+        local pair = Layer:Current(zone) or (server and shard and canon(server .. "-" .. shard))
         if not validPair(pair) then return end
         local dead = UnitIsDead(unit) and true or false
         local hp = 0
@@ -581,7 +583,7 @@ function ns.LayerCoreBuild(owner)
         end
         state.host, state.pair, state.phase, state.extended, state.seenHost = h.name, h.pair, "asking", nil, nil
         state.nonce = tostring(math.random(100000, 999999))
-        send(("HR:1:%d:%s:%s"):format(state.zone, state.pair, state.nonce), h.name, true)
+        send(("HR:1:%d:%s:%s"):format(state.zone, (rawOf[h.name] and canon(rawOf[h.name]) == state.pair) and rawOf[h.name] or state.pair, state.nonce), h.name, true)
         local asked1 = h.name
         setTimer(ASK_WAIT, function()
             if state and state.phase == "asking" and state.host == asked1 then nextHost() end
@@ -590,8 +592,9 @@ function ns.LayerCoreBuild(owner)
     end
 
     -- Hop to a layer in your zone. pair nil = any other layer. prefer = a player to ask first
-    -- (the one who saw the rare). isRetry: internal (after asking around).
-    function C:Start(pair, expectZone, prefer, isRetry)
+    -- (the one who saw the rare). isRetry: internal (after asking around). rank(pair) -> number
+    -- (lower first) or nil to skip that layer: fresh camp's choice (section 5).
+    function C:Start(pair, expectZone, prefer, isRetry, rank)
         if finding and not isRetry then say("still looking for a Void player there; one moment.") return end
         local why = self:Blocked()
         if why then
@@ -607,8 +610,10 @@ function ns.LayerCoreBuild(owner)
         local hosts, used = {}, {}
         local function add(name, p)
             if name and name ~= me and not used[name] and p ~= cur and (not pair or p == pair) then
+                local score = 0
+                if rank then score = rank(p); if not score then return end end
                 used[name] = true
-                hosts[#hosts + 1] = { name = name, pair = p }
+                hosts[#hosts + 1] = { name = name, pair = p, score = score, n = #hosts }
             end
         end
         -- the rare's finder first, then players who said they host, then other rare finders there
@@ -621,14 +626,21 @@ function ns.LayerCoreBuild(owner)
         for _, k in ipairs(known) do add(k[1], k[2]) end
         pruneRares()
         for _, r in pairs(rares) do if r.zone == zone and r.hp > 0 and not r.test then add(r.origin, r.pair) end end
+        -- ranked (fresh camp): best layers first, the order found within a layer kept
+        if rank then table.sort(hosts, function(a, b) if a.score ~= b.score then return a.score < b.score end return a.n < b.n end) end
         if #hosts == 0 then
             if not isRetry and self:Ask(zone) then
                 finding = true
                 changed()
                 C_Timer.After(FIND_WAIT, function()
                     finding = nil
-                    C:Start(pair, zone, prefer, true)
+                    C:Start(pair, zone, prefer, true, rank)
                 end)
+                return
+            end
+            if rank then
+                say("no Void player who can bring you over is on another layer here, apart from ones where you cleared this spot yourself in the last 10 minutes. Try again in a few minutes.")
+                changed()
                 return
             end
             -- Known players there who answered "can't host" (in a group, in combat, dead, just hosted, or Help
@@ -707,25 +719,31 @@ function ns.LayerCoreBuild(owner)
             send(("A:1:%d:%s:%d"):format(zone, cur, C:CanHost() and 1 or 0), asker, true)
         elseif tag == "A" then
             local zoneS, pair, h = msg:match("^A:1:(%d+):(%d+%-%d+):([01])$")
+            local rawA = pair
+            pair = canon(pair)   -- an older version sends "<server>-<its own number>"
             local zone = validZone(zoneS)
             if not (zone and validPair(pair)) then return end
             if not (asked[zone] and now() - asked[zone] <= ANSWER_WINDOW) or not isPeer(who) then return end
             census[zone] = census[zone] or {}
             census[zone][who] = { pair = pair, host = h == "1", t = now() }
+            noteRaw(who, rawA)
             C:Label(zone, pair)
             noteSeen(zone, pair)
             changed()
         elseif tag == "R" then
             local ttl, zoneS, pair, npc, hp, x, y, origin, name =
                 msg:match("^R:1:(%d):(%d+):(%d+%-%d+):(%d+):(%d+):(%d+):(%d+):([^:]+):(.+)$")
+            local rawR = pair
+            pair = canon(pair)
             local zone = validZone(zoneS)
             ttl, npc, hp, x, y = tonumber(ttl), tonumber(npc), tonumber(hp), tonumber(x), tonumber(y)
             if not (zone and ttl and ttl <= 2 and validPair(pair) and npc and npc < 10000000 and hp and hp <= 100
                     and x and x <= 1000 and y and y <= 1000 and validName(origin) and validName(name)) then return end
             if origin == me or not isPeer(who) then return end
+            noteRaw(origin, rawR)
             if storeRare(zone, pair, npc, hp, x, y, origin, name) then
                 if ttl > 0 then
-                    relay(("R:1:%d:%d:%s:%d:%d:%d:%d:%s:%s"):format(ttl - 1, zone, pair, npc, hp, x, y, origin, name), ttl, who, origin)
+                    relay(("R:1:%d:%d:%s:%d:%d:%d:%d:%s:%s"):format(ttl - 1, zone, rawR, npc, hp, x, y, origin, name), ttl, who, origin)
                 end
                 C:Label(zone, pair)
                 if hp > 0 then offerRare(name, zone, pair, origin, x, y, npc) end
@@ -735,11 +753,19 @@ function ns.LayerCoreBuild(owner)
             -- never relayed (a griefer's word reaches only who they whisper)
             local za, pa, zb, pb, age = msg:match("^L:1:0:(%d+):(%d+%-%d+):(%d+):(%d+%-%d+):(%d+)$")
             za, zb, age = validZone(za), validZone(zb), tonumber(age)
+            pa, pb = canon(pa), canon(pb)
             if not (za and zb and za ~= zb and validPair(pa) and validPair(pb) and age and age <= 3 * 3600) then return end
             if not isPeer(who) or not onLink then return end
             onLink(za, pa, zb, pb, who, now() - age)
+        elseif tag == "C" then
+            -- a camp cleared (section 5): zone, layer, grid cell, seconds ago; never relayed
+            local zoneS, pair, cx, cy, age = msg:match("^C:1:(%d+):(%d+%-%d+):(%d+):(%d+):(%d+)$")
+            pair = canon(pair)
+            local zone = validZone(zoneS)
+            if zone and validPair(pair) and isPeer(who) and onCamp then onCamp(zone, pair, tonumber(cx), tonumber(cy), tonumber(age)) end
         elseif tag == "HR" then
             local zoneS, pair, nonce = msg:match("^HR:1:(%d+):(%d+%-%d+):(%d+)$")
+            pair = canon(pair)
             if not (nonce and validPair(pair)) or not isPeer(who) then return end
             local function reply(txt) send(("HA:1:%s:%s"):format(nonce, txt), who, true) end
             if not C:HostingOn() then reply("no:off") return end
@@ -1158,6 +1184,221 @@ function ns.LayerCoreBuild(owner)
         else
             lastGroupT = now()   -- any roster or leader change
         end
+    end)
+
+    ------------------------------------------------------------------
+    -- 5. Fresh camp (2026-11-14). A hop doesn't move you: the world around you swaps to the target
+    -- layer's copy. So after you clear a pack, the same spot on another layer can still be full (the
+    -- race to 60 in WoW Forever farmed that way, helpers holding spots on other layers). When
+    -- CAMP_KILLS mobs die close together around you (any killer: nameplates and your target), the
+    -- spot counts as cleared on your layer, on a coarse grid, and the Void players in the zone hear:
+    --   C:1:zone:pair:cx:cy:age     never relayed; when, never anyone's position
+    -- "Fresh layer here" hops you to a layer with a Void helper where nobody reported clearing your
+    -- spot (or a cell next to it) in the last CAMP_FRESH seconds; never-reported layers first.
+    ------------------------------------------------------------------
+    local CELLS       = 25     -- grid per zone side (one cell ~100-200 yards, zones differ)
+    local CAMP_KILLS  = 5      -- deaths in one cell within CAMP_WINDOW = the camp is cleared
+    local CAMP_WINDOW = 600
+    local CAMP_FRESH  = 600    -- a clear this recent counts against a layer (respawn times not measured yet)
+    local CAMP_LIVE   = 1800   -- clears kept this long
+    local CAMP_GAP    = 120    -- one message per cleared cell per this
+    local CAMP_MAX    = 600    -- clears kept (all zones)
+    local OFFER_FRESH = 300    -- "hop to a fresh layer?" at most this often
+
+    local deaths = {}      -- [guid] = { t, zone, pair, cx, cy }: deaths around you, CAMP_WINDOW
+    local alive = {}       -- [guid] = t: seen alive (a corpse never seen alive isn't a new death; Sol review)
+    local camps = {}       -- [zone][pair][cell] = { t = cleared, own = true when YOU saw it }
+    local campSent = {}    -- [zone:pair:cell] = t
+    local lastFreshOffer, pendingOffer
+    local function cellKey(cx, cy) return cx .. ":" .. cy end
+
+    local function myCell(zone)
+        local pos = C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(zone, "player")
+        if not pos then return nil end
+        local x, y = pos:GetXY()
+        if not x or secret(x) or secret(y) or x <= 0 or y <= 0 or x >= 1 or y >= 1 then return nil end
+        return math.floor(x * CELLS), math.floor(y * CELLS)
+    end
+
+    local function pruneCamps()
+        local n = 0
+        for zone, zt in pairs(camps) do
+            for p, pt in pairs(zt) do
+                for k, c in pairs(pt) do if now() - c.t > CAMP_LIVE then pt[k] = nil else n = n + 1 end end
+                if not next(pt) then zt[p] = nil end
+            end
+            if not next(zt) then camps[zone] = nil end
+        end
+        while n > CAMP_MAX do   -- a flood: drop the oldest
+            local oz, op, ok, ot
+            for zone, zt in pairs(camps) do
+                for p, pt in pairs(zt) do
+                    for k, c in pairs(pt) do if not ot or c.t < ot then oz, op, ok, ot = zone, p, k, c.t end end
+                end
+            end
+            if not oz then break end
+            camps[oz][op][ok] = nil
+            n = n - 1
+        end
+        for g, d in pairs(deaths) do if now() - d.t > CAMP_WINDOW then deaths[g] = nil end end
+        local na = 0
+        for g, t in pairs(alive) do if now() - t > CAMP_WINDOW then alive[g] = nil else na = na + 1 end end
+        if na > 2000 then wipe(alive) end   -- a city full of plates for an hour: start over
+        for k, t in pairs(campSent) do if now() - t > CAMP_GAP then campSent[k] = nil end end
+    end
+
+    local function noteCamp(zone, pair, cx, cy, t, own)
+        if not (zone and validPair(pair) and cx and cy) or cx < 0 or cy < 0 or cx >= CELLS or cy >= CELLS then return end
+        t = math.min(t or now(), now())
+        if now() - t > CAMP_LIVE then return end
+        camps[zone] = camps[zone] or {}
+        camps[zone][pair] = camps[zone][pair] or {}
+        local k = cellKey(cx, cy)
+        local c = camps[zone][pair][k]
+        if not c then c = { t = t }; camps[zone][pair][k] = c end
+        if t > c.t then c.t = t end
+        if own then c.ownT = math.max(c.ownT or -math.huge, t) end
+        noteSeen(zone, pair, t)
+        changed()
+    end
+    onCamp = function(zone, pair, cx, cy, age)
+        if not (cx and cy and age) or age > CAMP_LIVE then return end
+        noteCamp(zone, pair, cx, cy, now() - age, false)
+    end
+
+    -- Seconds since your spot (your cell or one next to it) was reported cleared on that layer, or
+    -- nil; second return: seconds since YOU saw it cleared there, or nil
+    function C:SpotCleared(zone, pair)
+        local cx, cy = myCell(zone)
+        local pt = cx and camps[zone] and camps[zone][pair]
+        if not pt then return nil end
+        local best, bestOwn
+        for dx = -1, 1 do
+            for dy = -1, 1 do
+                local c = pt[cellKey(cx + dx, cy + dy)]
+                if c and now() - c.t <= CAMP_LIVE then
+                    if not best or c.t > best then best = c.t end
+                    if c.ownT and now() - c.ownT <= CAMP_LIVE and (not bestOwn or c.ownT > bestOwn) then bestOwn = c.ownT end
+                end
+            end
+        end
+        return best and (now() - best) or nil, bestOwn and (now() - bestOwn) or nil
+    end
+
+    -- Fresh camp's ranking for C:Start: never reported first, then reported long ago, then reported
+    -- lately by others (advisory: a forged report can't veto a layer; Sol review). Only a clear YOU
+    -- saw on that layer within CAMP_FRESH skips it.
+    local function freshRank(zone)
+        return function(p)
+            local age, ownAge = C:SpotCleared(zone, p)
+            if ownAge and ownAge < CAMP_FRESH then return nil end
+            if not age then return 0 end
+            if age >= CAMP_FRESH then return 1 + (CAMP_LIVE - age) / CAMP_LIVE end
+            return 3 + (CAMP_FRESH - age) / CAMP_FRESH
+        end
+    end
+
+    -- Hop to a layer where your spot is fresh (solo, like any hop)
+    function C:StartFresh()
+        local _, zone = Layer:Here()
+        if not zone then say("no zone here.") return end
+        self:Start(nil, zone, nil, false, freshRank(zone))
+    end
+
+    -- Is there a layer with a helper where no clear of your spot was reported lately? (for the offer)
+    local function freshLayerKnown(zone, cur)
+        local rank = freshRank(zone)
+        for p in pairs(C:Counts(zone)) do
+            local r = p ~= cur and #C:Hosts(zone, p) > 0 and rank(p)
+            if r and r < 3 then return true end
+        end
+        return false
+    end
+
+    -- "Hop there?" once a camp is cleared; mostly the last mob dies in combat, so then it waits for
+    -- combat to end (Sol review) and checks again: same zone and layer, can hop, a layer to go to
+    -- still at the cleared camp? same zone and layer, your cell within one of it (Sol review)
+    local function atCamp(o)
+        local cur, zone = Layer:Here()
+        if not (o and zone == o.zone and cur == o.pair) then return false end
+        local cx, cy = myCell(zone)
+        return cx ~= nil and math.abs(cx - o.cx) <= 1 and math.abs(cy - o.cy) <= 1
+    end
+    local function offerFresh(zone, cur, cx, cy)
+        if owner.addon ~= "VoidLayer" or not C:PopupsOn() then return end
+        if lastFreshOffer and now() - lastFreshOffer < OFFER_FRESH then return end
+        local o = { zone = zone, pair = cur, cx = cx, cy = cy, t = now() }
+        if InCombatLockdown() then pendingOffer = o return end
+        if C:Blocked() or not freshLayerKnown(zone, cur) then return end
+        lastFreshOffer = now()
+        StaticPopup_Show("VOIDLAYER_FRESH",
+            ("%s: you cleared this spot on %s.\nA Void player on a layer where nobody reported clearing it lately can bring you over (its mobs may be up). Hop there?"):format(LABEL, C:Label(zone, cur)),
+            nil, o)
+    end
+
+    StaticPopupDialogs.VOIDLAYER_FRESH = {
+        text = "%s",
+        button1 = "Hop there", button2 = CANCEL,
+        OnAccept = function(_, o)
+            if atCamp(o) then C:StartFresh() else say("you've moved on from that camp, so that hop no longer applies.") end
+        end,
+        timeout = 60, whileDead = false, hideOnEscape = true, preferredIndex = 3,
+    }
+
+    -- a mob died near you (nameplate or target): count it toward clearing this spot. Only a mob seen
+    -- alive first: targeting old corpses isn't a clear happening now (Sol review)
+    local function seeDeath(unit)
+        if not UnitExists(unit) or UnitPlayerControlled(unit) or IsInInstance() then return end
+        local g = UnitGUID(unit)
+        if not g or secret(g) or deaths[g] then return end
+        local dead = UnitIsDead(unit)
+        if secret(dead) then return end
+        if not dead then alive[g] = now() return end
+        if not alive[g] then return end
+        alive[g] = nil
+        local kind = strsplit("-", g)
+        if kind ~= "Creature" then return end
+        local friend = UnitIsFriend("player", unit)
+        if secret(friend) or friend then return end
+        local ctype = UnitCreatureType(unit)
+        if secret(ctype) or ctype == "Critter" then return end
+        local cls = UnitClassification(unit)
+        if not secret(cls) and cls == "minus" then return end
+        local cur, zone = Layer:Here()
+        if not (cur and zone) then return end
+        local cx, cy = myCell(zone)
+        if not cx then return end
+        deaths[g] = { t = now(), zone = zone, pair = cur, cx = cx, cy = cy }
+        -- deaths around this cell (it and the 8 next to it: a pack on a cell border) on this layer lately
+        local n = 0
+        for _, d in pairs(deaths) do
+            if d.zone == zone and d.pair == cur and math.abs(d.cx - cx) <= 1 and math.abs(d.cy - cy) <= 1
+                    and now() - d.t <= CAMP_WINDOW then n = n + 1 end
+        end
+        if n < CAMP_KILLS then return end
+        noteCamp(zone, cur, cx, cy, now(), true)
+        local key = zone .. ":" .. cur .. ":" .. cellKey(cx, cy)
+        if not (campSent[key] and now() - campSent[key] < CAMP_GAP) then
+            campSent[key] = now()
+            sendAll(("C:1:%d:%s:%d:%d:0"):format(zone, cur, cx, cy), targets(LINK_FANOUT, zone), false)
+        end
+        offerFresh(zone, cur, cx, cy)   -- VoidLayer only, like the rare pop-up
+    end
+
+    C_Timer.NewTicker(30, pruneCamps)
+    local cf = CreateFrame("Frame")
+    for _, ev in ipairs({ "UNIT_HEALTH", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED",
+                          "PLAYER_REGEN_ENABLED" }) do pcall(cf.RegisterEvent, cf, ev) end
+    cf:SetScript("OnEvent", function(_, ev, unit)
+        if ev == "PLAYER_REGEN_ENABLED" then
+            -- the camp was cleared in combat: offer now, if you're still at it (within 2 min)
+            local p = pendingOffer
+            pendingOffer = nil
+            if p and now() - p.t < 120 and atCamp(p) then pcall(offerFresh, p.zone, p.pair, p.cx, p.cy) end
+            return
+        end
+        if ev == "PLAYER_TARGET_CHANGED" then unit = "target" end
+        if type(unit) == "string" and (unit == "target" or unit:find("^nameplate")) then pcall(seeDeath, unit) end
     end)
 
     ------------------------------------------------------------------

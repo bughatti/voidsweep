@@ -2,13 +2,13 @@
 -- Void Layer: which layer you're on (WoW Forever)
 --
 -- Forever has no layer API. Every NPC's GUID carries it (measured 2026-11-08 with
--- VoidDev's LayerProbe): Creature-0-<server>-<map>-<shard>-<npcID>-<spawn>. The pair
--- "<server>-<shard>" is the same for every NPC around you on one layer, and changes
--- when a group invite moves you (7075-4 -> 7054-6) or you walk into another area
--- (Barrens 6831-7, Orgrimmar 7073-10). Now and then a single NPC from another layer
--- shows up (7073-9 among 6831-7), so the layer is the pair MOST nearby NPCs share.
+-- VoidDev's LayerProbe): Creature-0-<server>-<map>-<n>-<npcID>-<spawn>. The server
+-- number is the layer (<n> and <spawn> are per player: see L.Canon); it changes when a
+-- group invite moves you (7075 -> 7054) or you walk into another area (Barrens 6831,
+-- Orgrimmar 7073). Now and then a single NPC from another layer shows up, so the layer
+-- is the one MOST nearby NPCs share. Ids are "<server>-0" (the old two-number shape).
 --
---   ns.Layer:Current(zone)   pair for that zone ("6831-7"), or nil while unknown
+--   ns.Layer:Current(zone)   id for that zone ("6831-0"), or nil while unknown
 --   ns.Layer:Here()          pair, zone for where you stand
 --   ns.Layer:Compare(pair, zone)  "same" / "other" / nil (unknown either side)
 --   ns.Layer:Zone(mapID)     the zone a map rolls up to (caves, floors -> zone)
@@ -25,6 +25,18 @@
 local _, ns = ...
 local L = {}
 ns.Layer = L
+
+-- ONLY THE SERVER NUMBER IS THE LAYER (proven 2026-11-14 with two players in one group at one spot,
+-- each seeing the other, targeting the SAME grunt: user Creature-0-6832-1-125-5953-13B91CA0CC, son
+-- Creature-0-6832-1-3-5953-7053364CB3). The number after the map and the spawn part differ per
+-- player (that number counts up per player: 88, 95 ... 125 over a day; 2, 3 for a fresh login),
+-- and every layer change ever logged changed the server number. So the layer id is "<server>-0":
+-- the "-0" keeps the old "<server>-<n>" shape every message and saved table uses, and Canon turns
+-- an id from an older version ("6832-125") into the same "6832-0".
+function L.Canon(p)
+    local s = type(p) == "string" and p:match("^(%d+)%-%d+$")
+    return s and (s .. "-0") or p
+end
 
 local WINDOW  = 180   -- seconds a reading counts
 local MAX     = 60    -- readings kept
@@ -69,6 +81,12 @@ end
 local function note(unit)
     if not active() or not UnitExists(unit) then return end
     if UnitPlayerControlled(unit) then return end   -- players, pets, totems, summons
+    -- companion pets aren't player-controlled, but their GUID says another server (live 11-14: a
+    -- player's Mini Diablo read 7054-120 in a camp that was 6807-111)
+    for _, fn in ipairs({ UnitIsBattlePetCompanion, UnitIsOtherPlayersPet }) do
+        local ok, v = pcall(fn, unit)
+        if ok and not secret(v) and v then return end
+    end
     local g = UnitGUID(unit)
     if not g or secret(g) then return end
     local kind, _, server, _, shard = strsplit("-", g)
@@ -79,7 +97,7 @@ local function note(unit)
     for i = #readings, 1, -1 do
         if readings[i].guid == g then table.remove(readings, i) end
     end
-    table.insert(readings, { pair = server .. "-" .. shard, zone = zone, t = GetTime(), guid = g })
+    table.insert(readings, { pair = L.Canon(server .. "-" .. shard), zone = zone, t = GetTime(), guid = g })
     while #readings > MAX do table.remove(readings, 1) end
     recompute(zone)
 end
@@ -120,7 +138,7 @@ function L:Compare(pair, zone)
     if type(pair) ~= "string" or pair == "" or pair == "0" then return nil end
     local mine = self:Current(zone)
     if not mine then return nil end
-    return mine == pair and "same" or "other"
+    return mine == L.Canon(pair) and "same" or "other"
 end
 
 function L:OnChange(fn) listeners[#listeners + 1] = fn end

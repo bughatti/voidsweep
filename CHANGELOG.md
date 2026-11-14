@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.34 — 2026-11-14
+
+- **Sleeping bag invites (WoW Forever).** Unroll your Cozy Sleeping Bag and whispers with "bag" ("bag?", "sleeping bag pls") get a party invite for 15 minutes, with a whisper back saying where your bag is. Never a plain "inv", never a raid, one invite per player per bag, only while you can invite. The camp box gets a **Bag** button: one click says it in /say and puts a star on you so they can find you; right-click takes the star off. `/vsw bag` turns it off. A /reload keeps the bag going.
+- **WoW Forever layers:** layer names are now the same for everyone on a layer ("Layer 6832"): tested with two players side by side, only the first number in the game's id is the layer. Rares "on another layer" are judged by it too, and a companion pet can't flip your layer any more.
+
 ## 0.2.33 — 2026-11-14
 
 - **WoW Forever layers:** the layer network VoidSweep shares with VoidLayer got VoidLayer 0.2.0's update: layer names are the same for everyone ("Layer 98"), and your layer is read again right after the game's world refresh moves you (it kept showing the old one for up to 3 minutes).

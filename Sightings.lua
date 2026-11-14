@@ -99,7 +99,7 @@ end
 function S:LayerText(mapID, layer)
     local m = self:LayerMatch(mapID, layer)
     if m == "same" then return "|cff33ff33your layer|r" end
-    if m == "other" then return "|cffff9933another layer (" .. layer .. "), not up for you|r" end
+    if m == "other" then return "|cffff9933another layer (" .. (layer:match("^(%d+)") or layer) .. "), not up for you|r" end
     return ""
 end
 
@@ -201,6 +201,7 @@ function S:OnShared(body, sender, version)
         mapID, x1k, y1k, st, name = body:match("^(%d+),(%d+),(%d+),([ud]),(.+)$")
     end
     if layer and #layer > 20 then return end
+    if layer and VS.Layer and VS.Layer.Canon then layer = VS.Layer.Canon(layer) end   -- older senders: "<server>-<their own number>"
     mapID, x1k, y1k = tonumber(mapID), tonumber(x1k), tonumber(y1k)
     if not (mapID and x1k and y1k and name) or #name > 40 then return end
     local key = "n" .. name

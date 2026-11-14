@@ -429,14 +429,117 @@ local function build()
     end)
     sit:Hide()
     f.sit = sit
+    -- Bag (the user, 2026-11-13: "another button that says in /say whisper bag to me for invite"):
+    -- shown while your sleeping bag is out and its invites are on (SleepingBag.lua). One click
+    -- says it in /say; a click is the hardware event /say outdoors needs.
+    local bag = CreateFrame("Button", nil, f, "BackdropTemplate")
+    bag:SetSize(44, 16)
+    bag:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = VoidPX() })
+    bag:SetBackdropColor(0.10, 0.12, 0.15, 1)
+    bag:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
+    bag.text = bag:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    bag.text:SetPoint("CENTER")
+    bag.text:SetText("Bag")
+    bag:SetScript("OnClick", function() C:AnnounceBag() end)
+    bag:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(A[1], A[2], A[3], 1)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Offer your sleeping bag")
+        GameTooltip:AddLine("Says in /say: whisper you \"bag\" for a party invite. Whoever does gets invited and told where your bag is.", 0.8, 0.8, 0.8, true)
+        if InCombatLockdown() then
+            GameTooltip:AddLine("In combat the game won't let it put a star on you.", 0.8, 0.8, 0.8, true)
+        end
+        GameTooltip:Show()
+    end)
+    bag:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
+        GameTooltip:Hide()
+    end)
+    bag:Hide()
+    f.bag = bag
     f.lines = {}
     f:Hide()
     f.elapsed = 0
     f:SetScript("OnUpdate", function(self, dt)
+        C:SyncStar()                     -- follow the box while it's dragged
         self.elapsed = self.elapsed + dt
         if self.elapsed >= 1 then self.elapsed = 0; C:Refresh() end
     end)
+    f:HookScript("OnHide", function() C:SyncStar() end)
     return f
+end
+
+-- The star (the user, 2026-11-13: "putting a marker on me so people can find me"). SetRaidTarget is
+-- restricted: addon code can't call it, not even from a click (ADDON_ACTION_FORBIDDEN, live 11-14).
+-- Blizzard's secure button can ("raidtarget" action), so one lies over the Bag button: left click
+-- sets the star (only when no marker is on you: "set-unmarked") and says the /say line; right
+-- click takes the star off. It is never parented or anchored to the box: a protected child would
+-- make the box protected, and the box hides on a timer, also in combat. It's placed by screen
+-- position instead, hidden when combat starts (PLAYER_REGEN_DISABLED comes just before the lock)
+-- and left alone during combat; the plain Bag button below still says the line then.
+-- Made once at load, never later (secure setup only at load: a /reload in combat).
+-- WoW Forever only (sleeping bags): retail never gets the secure button.
+local star
+if (select(4, GetBuildInfo()) or 0) < 100000 then
+    star = CreateFrame("Button", "VoidSweepBagStar", UIParent, "SecureActionButtonTemplate")
+    star:SetFrameStrata("HIGH")
+    star:RegisterForClicks("AnyUp", "AnyDown")
+    star:SetAttribute("useOnKeyDown", false)   -- act on release even with cast-on-key-down on
+    star:SetAttribute("type", "raidtarget")
+    star:SetAttribute("unit", "player")
+    star:SetAttribute("marker", 1)
+    star:SetAttribute("action", "set-unmarked")
+    star:SetAttribute("action2", "clear")       -- right click
+    star:Hide()
+    star:SetScript("PostClick", function(_, button, down)
+        if down or button ~= "LeftButton" then return end
+        C:AnnounceBag()
+    end)
+    star:SetScript("OnEnter", function(self)
+        if box then box.bag:SetBackdropBorderColor(A[1], A[2], A[3], 1) end
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine("Offer your sleeping bag")
+        GameTooltip:AddLine("Says in /say: whisper you \"bag\" for a party invite. Whoever does gets invited and told where your bag is.", 0.8, 0.8, 0.8, true)
+        GameTooltip:AddLine("Puts a star on you so your group can find you. Right-click takes it off.", 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    star:SetScript("OnLeave", function()
+        if box then box.bag:SetBackdropBorderColor(A[1], A[2], A[3], 0.6) end
+        GameTooltip:Hide()
+    end)
+end
+
+function C:SyncStar()
+    if not star or InCombatLockdown() then return end
+    local b = box and box:IsVisible() and box.bag:IsShown() and box.bag
+    local l, t = b and b:GetLeft(), b and b:GetTop()
+    if not (l and t) then
+        if star:IsShown() then star:Hide() end
+        star.l, star.t = nil, nil
+        return
+    end
+    local s = b:GetEffectiveScale() / star:GetEffectiveScale()
+    if star.l ~= l or star.t ~= t or star.s ~= s then
+        star:ClearAllPoints()
+        star:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l * s, t * s)
+        star:SetSize(b:GetWidth() * s, b:GetHeight() * s)
+        star.l, star.t, star.s = l, t, s
+    end
+    if not star:IsShown() then star:Show() end
+end
+
+local starEv = star and CreateFrame("Frame")
+if starEv then
+    starEv:RegisterEvent("PLAYER_REGEN_DISABLED")
+    starEv:RegisterEvent("PLAYER_REGEN_ENABLED")
+    starEv:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            star:Hide()
+            star.l, star.t = nil, nil
+        else
+            C:SyncStar()
+        end
+    end)
 end
 
 local ORDER = { new = 1, wait = 2, have = 3, covered = 4, nouse = 5, info = 6 }
@@ -458,9 +561,16 @@ local function inDungeon()
     return inInst and (t == "party" or t == "raid")
 end
 
+-- your sleeping bag is out and its whisper invites are on: the box shows for it, with the Bag button
+local function bagOut()
+    local b = VS.Bag and VS.Bag:Active()
+    return b and VS:Config().bagInvite ~= false and b or nil
+end
+
 function C:Refresh()
     if not (on() and forever()) or inDungeon() then if box then box:Hide() end return end
     local list, atCamp = here()
+    local bag = bagOut()
     -- Left the fire on a mount / flight: done with this camp right away (the user, 2026-11-09:
     -- "im flying and had to close it far away"). Forget its items so they don't hold the box up;
     -- the next fire's aura (or walking back) brings them back.
@@ -468,8 +578,12 @@ function C:Refresh()
         campSince, campLeft, lastNear = nil, nil, 0
         wipe(seen)
         if VoidSweepDB then VoidSweepDB.campSeen = nil end
-        if box then box:Hide() end
-        return
+        list = {}
+        -- your sleeping bag's invites still run: keep the box for its Bag button (Sol review)
+        if not bag then
+            if box then box:Hide() end
+            return
+        end
     end
     if closed then
         if not atCamp then closed.away = true end         -- walked away from that fire
@@ -483,18 +597,23 @@ function C:Refresh()
     -- the 20 s count from the moment you left the fire's range, once: the camp's items (kept
     -- while campLeft counts down) don't restart it (two 20 s waits back to back = ~40 s)
     if atCamp or (#list > 0 and not campLeft) then lastNear = GetTime() end
-    if #list == 0 and not atCamp and GetTime() - lastNear > LINGER then
+    if #list == 0 and not atCamp and not bag and GetTime() - lastNear > LINGER then
         if box then box:Hide() end
         return
     end
-    if #list == 0 and not atCamp then return end   -- lingering: keep what's shown
+    if #list == 0 and not atCamp and not bag then
+        -- lingering: keep what's shown, but not a sleeping bag that's over (Sol review)
+        if box and box.bag:IsShown() then box:Hide() end
+        return
+    end
     box = box or build()
     -- one line per buff kind (a Fish Bowl and a Fishing Hut give the same buff)
-    local rows, byBenefit, campfire = {}, {}, nil
+    local rows, byBenefit, campfire, fireT = {}, {}, nil, -1
     for _, s in ipairs(list) do
         local o = s.obj
         if o.benefit == "campfire" then
-            campfire = o
+            -- the newest fire seen: a Journeyman one you just put down, not the Basic one before it
+            if s.t > fireT then campfire, fireT = o, s.t end
         elseif not byBenefit[o.benefit] then
             local st, txt = C:Judge(o)
             byBenefit[o.benefit] = true
@@ -533,6 +652,8 @@ function C:Refresh()
         box.title:SetText(("|cff33ff33Worth sitting:|r %d new buff%s"):format(new, new == 1 and "" or "s"))
     elseif #rows > 0 then
         box.title:SetText("|cff8c8c9eNothing new for you here|r")
+    elseif bag and not atCamp and not campfire then
+        box.title:SetText("|cff00c7ffSleeping bag|r")
     else
         box.title:SetText("|cff00c7ffCampfire|r")
     end
@@ -541,8 +662,12 @@ function C:Refresh()
     local restExp = restA and readable(restA.expirationTime) and restA.expirationTime
     local showSit = atCamp and not (restExp and restExp > GetTime())
     box.sit:SetShown(showSit and true or false)
+    -- the Bag button: left of Sit, or where Sit goes when Sit is hidden
+    box.bag:ClearAllPoints()
+    box.bag:SetPoint("TOPRIGHT", showSit and box.sit or box.close, "TOPLEFT", -4, 0)
+    box.bag:SetShown(bag and true or false)
     local i = 0
-    local width = box.title:GetStringWidth() + 20 + 20 + (showSit and 52 or 0)   -- + the x, + Sit
+    local width = box.title:GetStringWidth() + 20 + 20 + (showSit and 52 or 0) + (bag and 48 or 0)   -- + the x, + Sit, + Bag
     local function line(left, right)
         i = i + 1
         local l = box.lines[i]
@@ -563,7 +688,11 @@ function C:Refresh()
     if campfire then
         line("|cffb0b0b8" .. campfire.name .. ": " .. (campfire.utility or ""):gsub("additional camp features", "items") .. "|r")
     end
-    if #rows == 0 then line("|cff8c8c9eWalk up to or hover its objects to see what they give.|r") end
+    if #rows == 0 and (atCamp or #list > 0) then line("|cff8c8c9eWalk up to or hover its objects to see what they give.|r") end
+    if bag then
+        line(("|cffb0b0b8Sleeping bag out: \"bag\" whispers get an invite (%d min left)|r")
+            :format(math.max(1, math.ceil((bag.untilT - GetTime()) / 60))))
+    end
     -- resting: the game's 1-minute timer before the buffs land
     local rest = aura(REST_AURA)
     local exp = rest and readable(rest.expirationTime) and rest.expirationTime
@@ -604,12 +733,43 @@ local function onTooltip(tt, data)
     end
 end
 
+-- Putting a camp object down yourself (the user, 2026-11-13: "i just put down a journeyman
+-- campfire and a rock garden, but the campfire box didnt seem to update"). You stand on what you
+-- place, so neither a hover nor the walk-up highlight ever sees it. Each object's "spell" in
+-- CampData is its placing spell: that cast notes it. A campfire you place starts a new camp
+-- visit, so the fire you had before (and its objects) drop off the box.
+local byPlaceSpell
+local function placed(spellID)
+    if not byPlaceSpell then
+        byPlaceSpell = {}
+        for id, o in pairs(CD.objects) do
+            if o.spell then byPlaceSpell[o.spell] = id end
+        end
+    end
+    local id = byPlaceSpell[spellID]
+    if not id then return end
+    local obj = CD.objects[id]
+    if obj.benefit == "campfire" then
+        campSince, campLeft, closed = GetTime(), nil, nil
+        for k, s in pairs(seen) do
+            if s.restored or GetTime() - s.t > 60 then seen[k] = nil end
+        end
+        if VoidSweepDB then VoidSweepDB.campSeen = nil end
+    end
+    note("placed:" .. id, obj, id)
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_LOGIN")
 ev:RegisterEvent("PLAYER_SOFT_INTERACT_CHANGED")
 ev:RegisterUnitEvent("UNIT_AURA", "player")
-ev:SetScript("OnEvent", function(_, event, _, newGuid)
-    if event == "PLAYER_LOGIN" then
+ev:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+ev:SetScript("OnEvent", function(_, event, _, newGuid, spellID)
+    if event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if forever() and on() and not inDungeon() and readable(spellID) and type(spellID) == "number" then
+            placed(spellID)
+        end
+    elseif event == "PLAYER_LOGIN" then
         restoreSeen()
         if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and TooltipDataProcessor.AllTypes then
             TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, onTooltip)
@@ -644,6 +804,34 @@ function C:Sit()
     if not ok then
         print("|cff00c7ffVoidSweep|r: the game won't let an addon sit you down right now. Type |cffffd200/sit|r instead.")
     end
+end
+
+-- The Bag button: one /say line asking for "bag" whispers. Once per 30 s so a double click
+-- doesn't spam /say.
+local lastSay = 0
+function C:AnnounceBag()
+    local b = bagOut()
+    if not b then return end
+    if GetTime() - lastSay < 30 then
+        print("|cff00c7ffVoidSweep|r: you just said it; wait a few seconds before saying it again.")
+        return
+    end
+    local msg = "My sleeping bag is out" .. (b.where ~= "" and (" at " .. b.where) or "")
+        .. ": whisper me \"bag\" for an invite (rested XP bonus, stacks up to 3 times)."
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    local ok = send and pcall(send, msg, "SAY")
+    if ok then
+        lastSay = GetTime()
+    else
+        print("|cff00c7ffVoidSweep|r: the game didn't let the addon say it. Type it in /say yourself.")
+    end
+end
+
+-- SleepingBag.lua calls this when you unroll the bag: show the box (with the Bag button), even if
+-- you closed it at this fire.
+function C:BagOut()
+    closed = nil
+    C:Refresh()
 end
 
 function C:Toggle()

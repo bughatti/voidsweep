@@ -218,6 +218,12 @@ SlashCmdList.VOIDSWEEP = function(msg)
             and "|cff33ff33on|r (hover or walk up to a camp's objects)" or "|cffff5555off|r"))
         return
     end
+    if msg == "bag" and VS.Bag then   -- WoW Forever: sleeping bag invites (SleepingBag.lua)
+        local now = VS.Bag:Toggle()
+        print(("|cff00c7ffVoidSweep|r: sleeping bag invites %s"):format(now
+            and "|cff33ff33on|r (whispers with \"bag\" get an invite while your bag is out)" or "|cffff5555off|r"))
+        return
+    end
     if msg == "layer" then   -- WoW Forever: which layer you're on (Layer.lua)
         local pair, zone = VS.Layer:Here()
         local info = zone and C_Map.GetMapInfo(zone)
@@ -261,7 +267,7 @@ SlashCmdList.VOIDSWEEP = function(msg)
     end
     -- default: open the map + report live + remembered counts
     local live = VS.Scanner:GetLive()
-    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw hop · /vsw host · /vsw camp · /vsw clear|r")
+    print(("|cff00c7ffVoidSweep|r: %d up nearby, %d remembered. |cffaaaaaa/vsw rare, chest, worldboss, lore · /vsw completed · /vsw minimap · /vsw sync · /vsw here · /vsw box · /vsw net · /vsw layer · /vsw layers · /vsw hop · /vsw host · /vsw camp · /vsw bag · /vsw clear|r")
         :format(#live, VS.Learned:Count()))
     if not WorldMapFrame:IsShown() then
         ToggleWorldMap()
