@@ -15,6 +15,7 @@
 -- refuses addon messages in custom channels; the channel is only a member list):
 --   1. Who's on which layer:  Q:1:ttl:zone:nonce:asker   relayed once (ttl 1) to a few more
 --                             A:1:zone:pair:h            straight back to the asker; h=1 hosts
+--                             S:1:zone:pair:n            right after it: n players seen on that layer (6)
 --   2. Rares:                 R:1:ttl:zone:pair:npc:hp:x:y:origin:name   relayed twice (ttl 2);
 --                             hp 0 = dead. Shown in the window; a rare on ANOTHER layer of your
 --                             zone pops up "Hop there?" (one click).
@@ -42,7 +43,7 @@ local ADDON, ns = ...
 -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
 -- 3: one channel per faction, so this core must win over an older copy's both-factions one (2026-11-10)
 -- 4: layer names from the layer's own number, the same for every player (2026-11-14)
-local CORE_VERSION = 5   -- 5 (2026-11-14): layer = server number only (canon)
+local CORE_VERSION = 7   -- 5 (2026-11-14): layer = server number only (canon); 6: S, players seen per layer; 7: group rejoin (GQ/GL/RJ/RA)
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -209,6 +210,16 @@ function ns.LayerCoreBuild(owner)
         end
     end
     local function sendAll(msg, list, urgent) for _, n in ipairs(list) do send(msg, n, urgent) end end
+    -- urgent messages that must arrive in THIS order (a census answer, then its players-seen count):
+    -- send() puts each urgent one first, which would flip them (Sol review 2026-11-14)
+    local function sendFirst(msgs, to)
+        if not to or to == me or #queue + #msgs > QUEUE_MAX then return end
+        for i = #msgs, 1, -1 do table.insert(queue, 1, { msg = msgs[i], to = to }) end
+        if not pumping then
+            pump()
+            pumping = C_Timer.NewTicker(SEND_EVERY, pump)
+        end
+    end
 
     local function isPeer(name)
         if everPeer[name] then return true end
@@ -277,6 +288,7 @@ function ns.LayerCoreBuild(owner)
 
     -- Section 4 (one layer, many zones) fills these in; the census, rares and messages call them.
     local noteSeen = function() end   -- (zone, pair): a Void player saw this layer in this zone
+    local onGroupMsg                  -- section 6: GQ / GL / RJ / RA between group members
     local onLink, shareLinks          -- a link from a message; links to hand an asker
     local onCamp                      -- section 5: a camp cleared, from a message
     local linkSharedTo = {}           -- [asker] = GetTime() we last handed them links
@@ -308,6 +320,17 @@ function ns.LayerCoreBuild(owner)
         local out = {}
         for _, a in pairs(census[zone] or {}) do
             if now() - a.t <= LIVE then out[a.pair] = (out[a.pair] or 0) + 1 end
+        end
+        return out
+    end
+
+    -- [pair] = the most players any Void player there says it has seen on that layer (each count is
+    -- a minimum, only what that player saw, so the highest is the best guess). Layers nobody counted
+    -- aren't in it: unknown, never 0.
+    function C:SeenCounts(zone)
+        local out = {}
+        for _, a in pairs(census[zone] or {}) do
+            if a.seen and now() - a.t <= LIVE and (not out[a.pair] or a.seen > out[a.pair]) then out[a.pair] = a.seen end
         end
         return out
     end
@@ -464,7 +487,10 @@ function ns.LayerCoreBuild(owner)
     end
     function C:CanHost()
         -- never while your own hop is under way: two invites at once (Sol review)
+        -- nor while you wait for your own leader's re-invite: a hop guest's group would make you
+        -- refuse it (Sol release review)
         return self:HostingOn() and not hosting and not state and not finding
+            and not (self.Rejoining and self:Rejoining())
             and not IsInGroup() and not InCombatLockdown() and not IsInInstance()
             and not UnitIsDeadOrGhost("player")
             and not (lastHosted and now() - lastHosted < HOST_GAP)
@@ -482,7 +508,7 @@ function ns.LayerCoreBuild(owner)
         if hosting then return "Bringing another Void player over right now; a moment." end
         if InCombatLockdown() then return "In combat." end
         if IsInInstance() then return "Not inside a dungeon or raid." end
-        if IsInGroup() then return "In a group: leave it to hop (moving a whole group comes later)." end
+        if IsInGroup() then return "In a group: leave it to hop." end
         local cd = self:CooldownLeft()
         if cd > 0 then return ("Next hop in %d:%02d (one every 5 minutes)."):format(math.floor(cd / 60), math.floor(cd % 60)) end
     end
@@ -515,7 +541,11 @@ function ns.LayerCoreBuild(owner)
         -- the host is on the layer you landed on, whatever they reported before (2026-11-10: host said
         -- B, you landed on C, and the window kept listing them on B)
         local c = census[state.zone] and census[state.zone][state.host]
-        if c then c.pair = state.pair end
+        if c then
+            -- its players-seen count was for the layer it reported, not this one (Sol review)
+            if c.pair ~= state.pair then c.seen = nil end
+            c.pair = state.pair
+        end
         say(("you're on |cffffd200%s|r now."):format(C:Label(state.zone, state.pair)))
         if C:StayOn() and not state.test then   -- a test always leaves (Sol review)
             send(("HS:1:%s"):format(state.nonce), state.host, true)
@@ -716,7 +746,16 @@ function ns.LayerCoreBuild(owner)
             if not cur or here ~= zone then return end
             if lastReplyTo[asker] and now() - lastReplyTo[asker] < REPLY_GAP then return end
             lastReplyTo[asker] = now()
-            send(("A:1:%d:%s:%d"):format(zone, cur, C:CanHost() and 1 or 0), asker, true)
+            local out = { ("A:1:%d:%s:%d"):format(zone, cur, C:CanHost() and 1 or 0) }
+            -- how many players we've seen on our layer (VoidLayer's count, the last 15 min), so the
+            -- asker can tell which layer is quietest (the user, 2026-11-14). Its own message: an older
+            -- core's A pattern is anchored and would drop an A with an extra field. Right after the
+            -- A, never before it (the asker only takes a count for an answer it already has).
+            local seenFn = _G.VoidLayerSeenCount
+            local okS, sc = pcall(function() return seenFn and seenFn() end)
+            sc = okS and tonumber(sc)
+            if sc and sc >= 1 then out[2] = ("S:1:%d:%s:%d"):format(zone, cur, math.min(math.floor(sc), 999)) end
+            sendFirst(out, asker)
         elseif tag == "A" then
             local zoneS, pair, h = msg:match("^A:1:(%d+):(%d+%-%d+):([01])$")
             local rawA = pair
@@ -729,6 +768,19 @@ function ns.LayerCoreBuild(owner)
             noteRaw(who, rawA)
             C:Label(zone, pair)
             noteSeen(zone, pair)
+            changed()
+        elseif tag == "S" then
+            -- the players a census answerer has seen on its layer: only for an answer it just gave
+            -- us (same zone and layer, while we're asking), a sane number
+            local zoneS, pair, n = msg:match("^S:1:(%d+):(%d+%-%d+):(%d+)$")
+            pair = canon(pair)
+            local zone = validZone(zoneS)
+            n = tonumber(n)
+            if not (zone and validPair(pair) and n and n >= 1 and n <= 999) then return end
+            if not (asked[zone] and now() - asked[zone] <= ANSWER_WINDOW) or not isPeer(who) then return end
+            local a = census[zone] and census[zone][who]
+            if not (a and a.pair == pair) then return end
+            a.seen = n
             changed()
         elseif tag == "R" then
             local ttl, zoneS, pair, npc, hp, x, y, origin, name =
@@ -788,6 +840,8 @@ function ns.LayerCoreBuild(owner)
             local nonce, answer = msg:match("^HA:1:(%d+):(.+)$")
             if not (state and state.phase == "asking" and who == state.host and nonce == state.nonce) then return end
             if answer ~= "ok" then nextHost() end
+        elseif tag == "GQ" or tag == "GL" or tag == "RJ" or tag == "RA" then
+            if onGroupMsg then onGroupMsg(tag, msg, who) end
         end
     end
 
@@ -1479,12 +1533,219 @@ function ns.LayerCoreBuild(owner)
     end
 
     ------------------------------------------------------------------
+    -- 6. In a group, on another layer than the leader (a player's idea, 2026-11-14: "when your in a
+    -- group if someone in the group is on a different layer ... so they have to drop group to get a
+    -- reinvite"). Joining a group moves you to its leader's layer (measured 11-08), so the fix is
+    -- leave + re-invite; this makes it one click.
+    --   GQ:1          a member asks the leader which layer it's on
+    --   GL:1:zone:pair the leader's answer (to group members only)
+    --   RJ:1:nonce    "re-invite me": the leader's core says RA:1:nonce:ok|no:why; on ok you leave and
+    --                 its core invites you back once you're out (only someone who was in its group
+    --                 and asked, within REJOIN_WAIT), and you accept only that invite from that leader
+    -- Without VoidLayer on the leader: the leader is in your zone, close by, yet not visible = another
+    -- layer (a guess); the button then whispers the leader in plain chat and leaves.
+    ------------------------------------------------------------------
+    local REJOIN_WAIT, ASK_EVERY, NEAR_YARDS = 20, 90, 60
+    local leaderLayer          -- { name, zone, pair, t } from GL
+    local lastGQ = 0
+    local rejoin               -- { leader, nonce, phase = "asking" | "left", t }
+    local reinvite = {}        -- leader side: [name] = { nonce, t, size (the group then) }
+
+    -- a unit's "First Surname" (UnitName gives the two parts apart on Forever)
+    local function fullName(unit)
+        local n = GetUnitName and GetUnitName(unit, false)
+        if type(n) ~= "string" or secret(n) or n == "" then
+            local a, b = UnitName(unit)
+            if type(a) ~= "string" or secret(a) then return nil end
+            n = (type(b) == "string" and not secret(b) and b ~= "") and (a .. " " .. b) or a
+        end
+        return Net.Canon(n)
+    end
+    local function groupUnits()
+        local out, raid = {}, IsInRaid()
+        local n = GetNumGroupMembers() or 0
+        for i = 1, raid and n or n - 1 do out[#out + 1] = (raid and "raid" or "party") .. i end
+        return out
+    end
+    local function unitOf(name)
+        for _, u in ipairs(groupUnits()) do if fullName(u) == name then return u end end
+    end
+    local function isLeader(u)   -- a secret answer counts as no (Sol review)
+        local v = UnitIsGroupLeader(u)
+        if secret(v) then return false end
+        return v and true or false
+    end
+    local function leaderUnit()
+        if not IsInGroup() then return nil end
+        if isLeader("player") then return "player" end
+        for _, u in ipairs(groupUnits()) do if isLeader(u) then return u end end
+    end
+
+    local function askLeader(force)
+        local lu = leaderUnit()
+        if not lu or lu == "player" or IsInInstance() then return end
+        if not force and now() - lastGQ < ASK_EVERY then return end
+        local name = fullName(lu)
+        if not name then return end
+        lastGQ = now()
+        send("GQ:1:", name, true)   -- the trailing colon: onMessage only reads "TAG:1:..." (Sol release review)
+    end
+
+    -- you vs the leader: nil when it doesn't apply; else { leader, pair (theirs, nil = unknown),
+    -- mine, differs, how = "exact" | "guess" }
+    function C:GroupLayer()
+        local lu = leaderUnit()
+        if not lu or lu == "player" or IsInInstance() then return nil end
+        local name = fullName(lu)
+        local cur, zone = Layer:Here()
+        local out = { leader = name, mine = cur }
+        if leaderLayer and leaderLayer.name == name and now() - leaderLayer.t <= ASK_EVERY * 2 and leaderLayer.zone == zone and cur then
+            out.pair, out.how = leaderLayer.pair, "exact"
+            out.differs = canon(leaderLayer.pair) ~= canon(cur)
+            return out
+        end
+        -- no VoidLayer answer: in your zone and close by, yet the game says you can't see them
+        local vis = UnitIsVisible(lu)
+        if secret(vis) or vis then return out end
+        local lm, mm = C_Map.GetBestMapForUnit(lu), C_Map.GetBestMapForUnit("player")
+        if not (lm and mm and lm == mm) or secret(lm) then return out end
+        local ly, lx = UnitPosition(lu)
+        local my, mx = UnitPosition("player")
+        if type(lx) ~= "number" or type(mx) ~= "number" or secret(lx) or secret(mx) then return out end
+        local d = math.sqrt((lx - mx) ^ 2 + (ly - my) ^ 2)
+        if d <= NEAR_YARDS then out.differs, out.how = true, "guess" end
+        return out
+    end
+
+    -- right before leaving: still the same group with the same leader, no fight, no instance (a
+    -- late answer or the 4 s timer must not leave a group you joined since; Sol review)
+    local function okToLeave(r)
+        if not (r and IsInGroup()) or InCombatLockdown() or IsInInstance() then return false end
+        local lu = leaderUnit()
+        return lu ~= nil and lu ~= "player" and fullName(lu) == r.leader
+    end
+
+    -- the Rejoin button: leave the group and get the leader's invite again (its layer comes with it)
+    function C:Rejoin()
+        local g = self:GroupLayer()
+        if not (g and g.leader) then say("you're not in a group with someone else leading.") return false end
+        if InCombatLockdown() then say("not in combat.") return false end
+        if IsInInstance() then say("not inside a dungeon or raid: leaving would take you out.") return false end
+        rejoin = { leader = g.leader, nonce = tostring(math.random(100000, 999999)), phase = "asking", t = now() }
+        send(("RJ:1:%s"):format(rejoin.nonce), g.leader, true)
+        say(("asking %s for a re-invite..."):format(g.leader))
+        local r = rejoin
+        C_Timer.After(4, function()
+            if rejoin ~= r or r.phase ~= "asking" then return end
+            if not okToLeave(r) then rejoin = nil; changed(); return end
+            -- no VoidLayer on the leader: ask in plain words, then leave so they can invite you
+            if SendChatMessage then pcall(SendChatMessage, "I'm on another layer than you: please re-invite me (VoidLayer).", "WHISPER", nil, r.leader) end
+            r.phase, r.t = "left", now()
+            if C_PartyInfo and C_PartyInfo.LeaveParty then C_PartyInfo.LeaveParty() end
+            say(("%s doesn't run VoidLayer: whispered them to re-invite you, and left the group."):format(r.leader))
+            changed()
+        end)
+        changed()
+        return true
+    end
+    function C:Rejoining() return rejoin and now() - rejoin.t <= REJOIN_WAIT and rejoin or nil end
+
+
+    onGroupMsg = function(tag, msg, who)
+        if tag == "GQ" then
+            -- only for our own group, only when we lead it
+            if not (IsInGroup() and isLeader("player") and unitOf(who)) or IsInInstance() then return end
+            local cur, zone = Layer:Here()
+            if cur and zone then send(("GL:1:%d:%s"):format(zone, cur), who, true) end
+        elseif tag == "GL" then
+            local zoneS, pair = msg:match("^GL:1:(%d+):(%d+%-%d+)$")
+            local zone = validZone(zoneS)
+            pair = canon(pair)
+            local lu = leaderUnit()
+            if not (zone and validPair(pair) and lu and lu ~= "player" and fullName(lu) == who) then return end
+            leaderLayer = { name = who, zone = zone, pair = pair, t = now() }
+            changed()
+        elseif tag == "RJ" then
+            local nonce = msg:match("^RJ:1:(%d+)$")
+            if not nonce then return end
+            local function reply(txt) send(("RA:1:%s:%s"):format(nonce, txt), who, true) end
+            if not (IsInGroup() and isLeader("player")) then reply("no:notleader") return end
+            if not unitOf(who) then reply("no:notmember") return end
+            if IsInInstance() then reply("no:instance") return end
+            reinvite[who] = { nonce = nonce, t = now(), size = GetNumGroupMembers() or 0 }
+            reply("ok")
+        elseif tag == "RA" then
+            local nonce, answer = msg:match("^RA:1:(%d+):(.+)$")
+            if not (rejoin and rejoin.phase == "asking" and who == rejoin.leader and nonce == rejoin.nonce) then return end
+            if answer ~= "ok" then
+                rejoin = nil
+                say(("%s can't re-invite you right now (%s)."):format(who, answer:gsub("^no:", "")))
+                changed()
+                return
+            end
+            if not okToLeave(rejoin) then rejoin = nil; changed(); return end
+            rejoin.phase, rejoin.t = "left", now()
+            if C_PartyInfo and C_PartyInfo.LeaveParty then C_PartyInfo.LeaveParty() end
+            say(("leaving the group: %s re-invites you, and you land on their layer."):format(who))
+            changed()
+        end
+    end
+
+    -- leader side: a member who asked has left: invite them back (once)
+    local function reinviteGone()
+        -- only for the group we lead (or the two-person one that ended when they left); a request
+        -- must not outlive our lead and pull a former member into some other group (Sol review)
+        if IsInGroup() and not isLeader("player") then wipe(reinvite) return end
+        for name, r in pairs(reinvite) do
+            if now() - r.t > REJOIN_WAIT then reinvite[name] = nil
+            -- out of our group: still leading it, or solo because it was just the two of us (Sol review)
+            elseif not unitOf(name) and (IsInGroup() or r.size == 2) and C_PartyInfo and C_PartyInfo.InviteUnit then
+                reinvite[name] = nil
+                C_PartyInfo.InviteUnit(name)
+                say(("re-inviting %s (onto your layer)."):format(name))
+            end
+        end
+    end
+    -- a member we kick didn't "leave to rejoin": drop their request, or a kick could be undone by
+    -- asking for a re-invite first (Sol release review). The game's Remove from Group goes through these.
+    local function kicked(target)
+        if type(target) ~= "string" or secret(target) then return end
+        local name = Net.Canon(target)
+        if name and reinvite[name] then reinvite[name] = nil return end
+        name = UnitExists and UnitExists(target) and fullName(target)
+        if name then reinvite[name] = nil end
+    end
+    if hooksecurefunc then
+        if C_PartyInfo and C_PartyInfo.UninviteUnit then hooksecurefunc(C_PartyInfo, "UninviteUnit", kicked) end
+        if type(UninviteUnit) == "function" then hooksecurefunc("UninviteUnit", kicked) end
+    end
+
+    -- member side: the leader's invite after a rejoin, and only that one
+    local function rejoinInvite(from)
+        local r = rejoin
+        if not (r and r.phase == "left" and now() - r.t <= REJOIN_WAIT) then return false end
+        if type(from) ~= "string" or secret(from) or Net.Canon(from) ~= r.leader then return false end
+        if IsInGroup() or InCombatLockdown() or IsInInstance() then return false end
+        rejoin = nil
+        AcceptGroup()
+        C_Timer.After(0, function()
+            local d = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
+            if d then d.inviteAccepted = 1 end
+            StaticPopup_Hide("PARTY_INVITE")
+        end)
+        say("back in the group, on the leader's layer.")
+        changed()
+        return true
+    end
+    C_Timer.NewTicker(30, function() pcall(askLeader, false) end)
+
+    ------------------------------------------------------------------
     -- Events
     ------------------------------------------------------------------
     if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then C_ChatInfo.RegisterAddonMessagePrefix(PREFIX) end
     local f = CreateFrame("Frame")
     for _, ev in ipairs({ "CHAT_MSG_ADDON", "PARTY_INVITE_REQUEST", "PLAYER_REGEN_DISABLED", "GROUP_ROSTER_UPDATE",
-                          "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "ZONE_CHANGED_NEW_AREA" }) do
+                          "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "ZONE_CHANGED_NEW_AREA", "PARTY_LEADER_CHANGED" }) do
         pcall(f.RegisterEvent, f, ev)
     end
     f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
@@ -1500,6 +1761,10 @@ function ns.LayerCoreBuild(owner)
         elseif event == "PLAYER_REGEN_DISABLED" then
             if state and state.phase == "asking" then stop("hop cancelled: you're in combat.") end
         elseif event == "GROUP_ROSTER_UPDATE" then
+            -- section 6: re-invite a member who asked and left; ask a (new) leader its layer
+            pcall(reinviteGone)
+            if rejoin and rejoin.phase == "asking" and not IsInGroup() then rejoin = nil end
+            if now() - lastGQ > 10 then C_Timer.After(3, function() pcall(askLeader, true) end) end
             -- the leave-without-name-match window lasts only as long as the hop's own group: once we've
             -- been in it and it's gone, a later two-person group (a friend's) is never left (Sol review)
             if hopGroupUntil > 0 then
@@ -1524,7 +1789,15 @@ function ns.LayerCoreBuild(owner)
                 lateGuest = nil
             end
             changed()
+        elseif event == "PARTY_LEADER_CHANGED" then
+            leaderLayer = nil
+            if rejoin and rejoin.phase == "asking" then rejoin = nil end   -- a request for a group that changed (Sol review)
+            if not isLeader("player") then wipe(reinvite) end
+            C_Timer.After(2, function() pcall(askLeader, true) end)
+            changed()
         elseif event == "PARTY_INVITE_REQUEST" then
+            -- the leader's invite back after a rejoin (section 6)
+            if rejoinInvite(a1) then return end
             -- accept only the invite from the player we asked, while asking
             if not (state and state.phase == "asking") then return end
             if type(a1) ~= "string" or secret(a1) or Net.Canon(a1) ~= state.host then return end

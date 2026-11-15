@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.35 — 2026-11-14
+
+- The shared layer network now passes along how many players each Void player has seen on its layer (VoidLayer shows the quietest layer from it), and as a group leader VoidSweep re-invites a member who asks to rejoin onto your layer (VoidLayer's Rejoin button). Nothing else changes in VoidSweep.
+
 ## 0.2.34 — 2026-11-14
 
 - **Sleeping bag invites (WoW Forever).** Unroll your Cozy Sleeping Bag and whispers with "bag" ("bag?", "sleeping bag pls") get a party invite for 15 minutes, with a whisper back saying where your bag is. Never a plain "inv", never a raid, one invite per player per bag, only while you can invite. The camp box gets a **Bag** button: one click says it in /say and puts a star on you so they can find you; right-click takes the star off. `/vsw bag` turns it off. A /reload keeps the bag going.
