@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.37 — 2026-11-15
+
+- **Credits:** the game data this addon ships is now called **VoidDB**; full credits and licences of the open data in it are in NOTICE.txt and the README.
+
 ## 0.2.36 — 2026-11-15
 
 - **WoW Forever: rare, treasure and lore spots now spread to everyone**, including players who log in later, over the Void sharing network (the one VoidQuest and VoidDungeon use). Two players' spot still confirms it on your map. You don't need VoidQuest for it.
@@ -114,11 +118,11 @@
 
 ## 0.2.15
 
-- **WoW Forever: every Classic rare on your map.** Over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) now have a pin where they spawn, one per rare, with directions on click. The Classic world shows no live markers for rares, so these pins show where to look; they don't light up when the rare is up. Data from NorgannonDB, see Credits.
+- **WoW Forever: every Classic rare on your map.** Over 300 rares (Humar the Pridelord, Rocklance, Takk the Leaper and the rest) now have a pin where they spawn, one per rare, with directions on click. The Classic world shows no live markers for rares, so these pins show where to look; they don't light up when the rare is up. Data from VoidDB, see Credits.
 - **The starter map is refreshed** with more Midnight rares, treasures, world bosses and lore spots. From now on it can also take in spots two or more players have shared (never single reports).
 - **Starter-map pins say so.** Hover one you haven't seen yourself and it reads "Known spawn spot" instead of "Seen here before".
 - **WoW Forever: the players box is right after a /reload.** Players who logged off stay on the sharing channel's list; VoidSweep already left them out once a message to them bounced, but forgot that on every reload, so the count jumped up for a minute. It now remembers.
-- **Licence: VoidSweep is now GPL-3.0** (was MIT), because it includes NorgannonDB's data. See Credits in the README.
+- **Licence: VoidSweep is now GPL-3.0** (was MIT), because VoidDB's data includes GPL-3.0 open data. See Credits in the README.
 
 ## 0.2.14
 

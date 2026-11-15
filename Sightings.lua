@@ -175,12 +175,18 @@ local function swKill(mapID, key)
 end
 
 -- how long this rare is usually down: minutes, players, yours (nil = not known yet; your own
--- sample comes back with no player count)
+-- sample comes back with no player count). Else what players saw before this version came out
+-- (Seed.lua back=, tools/cmd/voidsweep-seed: the author's own samples, or 2+ players), 4th = true;
+-- that one is local data, so it shows with sharing off too.
 function S:Respawn(mapID, key)
     local net = swNet()
-    if not net then return nil end
-    local v, n, own = net:Get("p", tostring(mapID), key)
-    return tonumber(v), n, own
+    if net then
+        local v, n, own = net:Get("p", tostring(mapID), key)
+        if tonumber(v) then return tonumber(v), n, own end
+    end
+    local s = seedRare(mapID, key)
+    local back = s and tonumber(s.back)
+    if back and back > 0 then return back, nil, nil, true end
 end
 
 -- { t, dead, by, age } for a seed key on a map, or nil when stale.

@@ -13,8 +13,8 @@ local ADDON, VS = ...
 local forever = (select(4, GetBuildInfo()) or 0) < 100000
 
 if forever then
--- Rares (and their spawn points) VoidSweep can't see on WoW Forever come from NorgannonDB
--- (github.com/zmarotrix/NorgannonDB, commit 469831f4eefa1a6fb00e0c953af765edd0e8a685, GPL-3.0), which builds on QuestieDB.
+-- Rares (and their spawn points) VoidSweep can't see on WoW Forever come from VoidDB
+-- (credits: NOTICE.txt) @ 469831f4eefa1a6fb00e0c953af765edd0e8a685.
 -- forever
 VS.Seed = {
     [1411] = {

@@ -106,7 +106,7 @@ VoidSweep reads the game's own live spawn markers, so its pins show what's actua
 
 ## Credits
 
-- **WoW Forever rares and their spawn spots** come from [NorgannonDB](https://github.com/zmarotrix/NorgannonDB) by Maro (GPL-3.0), which builds on [QuestieDB](https://github.com/Questie/Questie) (GPL-3.0) and pfQuest, and reads WoW Forever's own game tables. Thank you.
+- **WoW Forever rares and their spawn spots** come from VoidDB. **VoidDB**, the game data the Void addons ship, is built from Blizzard's game data, finds shared by Void players, and open data: NorgannonDB by Maro, QuestieDB, pfQuest by Shagu, DungeonJournal by Exehn and CMaNGOS classic-db (GPL-3.0; pfQuest MIT). Full credits and licences: NOTICE.txt in the addon folder. Thank you to all of them.
 - **Camp items and their buffs** come from [Campfire Tooltips: Forever](https://www.curseforge.com/wow/addons/campfire-tooltips) by GideonWhitlock (GPL-3.0-or-later, [source](https://github.com/GideonWhitlock/wow-forever-addons)). Thank you.
 
 ---
