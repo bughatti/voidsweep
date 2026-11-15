@@ -311,14 +311,18 @@ local lastReplyTo = {}   -- Forever: [sender] = GetTime() of our last answer to 
 local me
 local refreshPending
 
+-- (a local per step, not "s = (s:gsub(...))": the test engine, gopher-lua, crashes on that form;
+-- WoW didn't mind. Same result.)
 local function cleanName(s)
     if type(s) ~= "string" then return nil end
-    s = (s:gsub("[%c|;,:]", ""))
-    s = (s:gsub("^%s+", ""):gsub("%s+$", ""))
-    if #s > 48 then
-        s = (s:sub(1, 48):gsub("[\192-\255][\128-\191]*$", ""))
+    local t = s:gsub("[%c|;,:]", "")
+    t = t:gsub("^%s+", "")
+    t = t:gsub("%s+$", "")
+    if #t > 48 then
+        t = t:sub(1, 48)
+        t = t:gsub("[\192-\255][\128-\191]*$", "")
     end
-    return s ~= "" and s or nil
+    return t ~= "" and t or nil
 end
 
 -- Traffic counter (the user, 2026-11-08: nothing had ever arrived and nothing told us
@@ -379,6 +383,8 @@ end
 local function send(msg, urgent, to)
     if #queue >= QUEUE_MAX then return end
     if net and not to then return end
+    -- the old spot formats: only while an old client may still need them (the swarm carries spots)
+    if Sync.legacy and msg:match("^[NQB]:") and not Sync.legacy:Sending() then tally("held", msg) return end
     local item = { msg = msg, to = to }
     if urgent then table.insert(queue, 1, item) else queue[#queue + 1] = item end
     if not sending then
@@ -450,13 +456,22 @@ end
 -- Data.lua calls this when you learn a spot the starter map doesn't have.
 function Sync:ShareSpot(mapID, rec)
     if not (enabled() and mapID and rec) then return end
+    if Sync.SwarmReport then Sync.SwarmReport(mapID, rec) end
     sendSpots("N", mapID, { rec }, Sync.Targets(FANOUT))
 end
 
+local lastSwarmAsk = {}
 local function askHere()
-    if not enabled() or not netIndex() then return end
+    if not enabled() then return end
     local mapID = C_Map.GetBestMapForUnit("player")
     if not mapID then return end
+    -- the swarm first: it rides another channel, so nobody on VoidSweep's own doesn't stop it (Codex review)
+    if VoidSwarm and VoidSwarm.net and Sync.swarmOn
+        and not (lastSwarmAsk[mapID] and GetTime() - lastSwarmAsk[mapID] < QUERY_CD) then
+        lastSwarmAsk[mapID] = GetTime()
+        VoidSwarm.net:Interest("w", tostring(mapID))
+    end
+    if not netIndex() then return end
     if lastQuery[mapID] and GetTime() - lastQuery[mapID] < QUERY_CD then return end
     if net then
         net:RequestRoster()
@@ -470,6 +485,8 @@ local function askHere()
     lastQuery[mapID] = GetTime()
     send(("Q:%s:%d"):format(SPOT_PROTO, mapID))
 end
+
+Sync.AskHere = askHere   -- (tools/cmd/vsweep-sync-test)
 
 local function ownSpots(mapID, cap)
     local out = {}
@@ -543,8 +560,38 @@ local function scheduleRefresh()
     end)
 end
 
+local swFeed   -- the swarm bridge (below): an old-format spot also counts as a swarm vote
+-- who counts as one vote: the swarm's salted fingerprint when it runs (the same player by the old
+-- messages and by the swarm then counts once), else the name, as before
+-- Votes saved before the swarm were kept by sender NAME; now every vote is "#" .. the one-way code.
+-- Once, as soon as the code is known, the saved names become codes, or a player who voted before
+-- updating would count a second time after (Codex review 2026-11-15). Names aren't kept after that.
+local function hashVoters(hashFn)
+    if VoidSweepDB.votersHashed then return end
+    VoidSweepDB.votersHashed = true
+    for _, recs in pairs(VoidSweepDB.shared or {}) do
+        for _, s in pairs(recs) do
+            if type(s) == "table" and type(s.by) == "table" then
+                local by = {}
+                for who in pairs(s.by) do
+                    if type(who) == "string" then by[who:sub(1, 1) == "#" and who or ("#" .. hashFn(who))] = true end
+                end
+                s.by = by
+            end
+        end
+    end
+end
+local function voter(sender)
+    local n = VoidSwarm and VoidSwarm.net
+    local fn = n and n.io and n.io.hash
+    if fn and VoidSweepDB then hashVoters(fn) end
+    local h = fn and fn(sender)
+    return h and ("#" .. h) or sender, h
+end
+Sync.HashVoters = hashVoters   -- (tools/cmd/vsweep-sync-test)
 local function takeSpots(mapID, body, sender)
     local changed, n = false, 0
+    local who, h = voter(sender)
     for entry in body:gmatch("[^;]+") do
         n = n + 1
         if n > 40 then break end
@@ -557,7 +604,8 @@ local function takeSpots(mapID, body, sender)
             local rec = { kind = kind, name = name, x = x / 10000, y = y / 10000,
                           vignetteID = (vid and vid > 0) and vid or nil,
                           questID = (qid and qid > 0) and qid or nil }
-            if VS.Learned:AddShared(mapID, rec, sender) then changed = true end
+            if VS.Learned:AddShared(mapID, rec, who, sender) then changed = true end
+            if swFeed and h then swFeed(mapID, rec, h) end
         end
     end
     if changed then scheduleRefresh() end
@@ -572,6 +620,7 @@ function Sync:OnSpotMessage(msg, sender, replyTo)
     if not spotRateOK(sender) then return true end
     local mapID = tonumber(mapS)
     if not (mapID and mapID > 0 and C_Map.GetMapInfo(mapID)) then return true end
+    if Sync.legacy then Sync.legacy:Heard(sender, tag) end
 
     if tag == "Q" and net then
         if body == "" then answerWhisper(mapID, sender, replyTo) end
@@ -836,6 +885,92 @@ end
 ----------------------------------------------------------------------
 local HEARD_MAX = 500   -- players remembered for /vsw synctest
 
+----------------------------------------------------------------------
+-- The swarm bridge (2026-11-15, stage 4; WoW Forever only): rare / treasure / lore spots ride the
+-- swarm (VoidSwarm.lua) as well as the old N / Q / B whispers. Learned / AddShared stay what the
+-- map reads; every swarm vote goes through AddShared, and every old-format spot also counts as a
+-- swarm vote (swFeed). Live "rare up" sightings and the players-here count stay on VoidSweepNet.
+--   w  piece = map,  key = "kindcode/v<vignetteID>" or "kindcode/n<name>" (VoidSweep's own key),
+--      value = "x,y,vignetteID,questID,name"   (x/y 0..9999)
+-- 2 players, like the map's "a second player confirms it".
+----------------------------------------------------------------------
+local SWNEAR = 300   -- 3% of the map: two players' spots for the same rare / treasure agree
+local function swKey(rec)
+    local code = KIND_CODE[rec.kind]
+    if not code then return nil end
+    return code .. "/" .. (rec.vignetteID and ("v" .. rec.vignetteID) or ("n" .. (rec.name or "?")))
+end
+local function swValue(rec)
+    local name = cleanName(rec.name)
+    if not (name and rec.x and rec.y) then return nil end
+    return ("%d,%d,%d,%d,%s"):format(math.floor(rec.x * 10000 + 0.5), math.floor(rec.y * 10000 + 0.5),
+        rec.vignetteID or 0, rec.questID or 0, name)
+end
+local function swRec(key, value)
+    local code = key:match("^(%a)/")
+    local xs, ys, vs, qs, name = value:match("^(%d+),(%d+),(%d+),(%d+),(.+)$")
+    local kind = code and CODE_KIND[code]
+    if not (kind and xs) then return nil end
+    local vid, qid = tonumber(vs), tonumber(qs)
+    return { kind = kind, name = name, x = tonumber(xs) / 10000, y = tonumber(ys) / 10000,
+             vignetteID = (vid and vid > 0) and vid or nil, questID = (qid and qid > 0) and qid or nil }
+end
+
+function Sync:SwarmBridge()
+    if Sync.swarmOn or not (VoidSwarm and VoidSwarm.Want) then return end
+    Sync.swarmOn = true
+    if VS.Sightings and VS.Sightings.SwarmBridge then VS.Sightings:SwarmBridge() end   -- kill times, respawns
+    VoidSweepDB = VoidSweepDB or {}
+    VoidSweepDB.swarm = VoidSweepDB.swarm or {}
+    -- the old spot messages (N / Q / B): until 30 days after the last old client (VoidSwarm.Legacy)
+    VoidSweepDB.legacy = VoidSweepDB.legacy or {}
+    if VoidSwarm.Legacy then Sync.legacy = VoidSwarm.Legacy("vs", "w", VoidSweepDB.legacy) end
+    local feeding = false
+    local spec = { need = 2, store = VoidSweepDB.swarm, maxPieces = 400, maxKeys = 400,
+        paused = function() return not enabled() end,   -- /vsw sync off: nothing sent or taken
+        near = function(a, b)
+            local x1, y1, n1 = a:match("^(%d+),(%d+),%d+,%d+,(.+)$")
+            local x2, y2, n2 = b:match("^(%d+),(%d+),%d+,%d+,(.+)$")
+            return n1 and n1 == n2 and math.abs(x1 - x2) <= SWNEAR and math.abs(y1 - y2) <= SWNEAR
+        end,
+        valid = function(piece, key, value)
+            local m = tonumber(piece)
+            if not (m and m > 0 and C_Map.GetMapInfo(m)) then return false end
+            local rec = swRec(key, value)
+            if not (rec and rec.x > 0 and rec.x < 1 and rec.y > 0 and rec.y < 1 and cleanName(rec.name) == rec.name) then return false end
+            return swKey(rec) == key   -- the key must be this spot's own (no riding on another rare's key)
+        end,
+        onTake = function(piece, key, _, holder, orig)
+            if feeding then return end
+            local rec = swRec(key, orig)
+            if rec and VS.Learned:AddShared(tonumber(piece), rec, "#" .. holder) then scheduleRefresh() end
+        end }
+    VoidSwarm.Want("w", spec)
+    swFeed = function(mapID, rec, h)
+        local net = VoidSwarm.net
+        local k, v = swKey(rec), swValue(rec)
+        if not (net and k and v) then return end
+        feeding = true
+        pcall(net.take, net, "w", tostring(mapID), k, v, h)
+        feeding = false
+    end
+    Sync.SwarmReport = function(mapID, rec)
+        local net = VoidSwarm.Get()
+        local k, v = swKey(rec), swValue(rec)
+        if net and k and v then net:Report("w", tostring(mapID), k, v) end
+    end
+    -- what you already know (not in the starter map) goes in once
+    C_Timer.After(20, function()
+        local learned = VoidSweepDB and VoidSweepDB.learned or {}
+        for mapID, recs in pairs(learned) do
+            local seed = VS.Seed and VS.Seed[mapID]
+            for key, rec in pairs(recs) do
+                if not (seed and seed[key]) then Sync.SwarmReport(mapID, rec) end
+            end
+        end
+    end)
+end
+
 function Sync:Init()
     local Net = VS.WhisperNet
     if Net and Net.Active() then
@@ -858,6 +993,9 @@ function Sync:Init()
         -- that, and nothing counted them)
         net.onBounce = function() tally("offline", "whisper") end
         me = Net.Me()
+        -- the swarm (VoidSwarm.lua): this map's spots ride it too, and without VoidQuest VoidSweep runs it
+        Sync:SwarmBridge()
+        if VS.SwarmLink then VS.SwarmLink.Start(VoidSweepDB) end
     else
         me = UnitName("player")
     end
@@ -966,8 +1104,9 @@ local function printTraffic()
         table.sort(out)
         return #out > 0 and table.concat(out, ", ") or "none"
     end
-    print(("|cff00c7ffVoidSweep|r: traffic since %s -- sent: %s | received: %s | not sent, nobody online: %s | offline: %s | refused: %s"):format(
-        date("%b %d %H:%M", s.since), list(s.sent), list(s.got), list(s.nobody), list(s.offline), list(s.refused)))
+    print(("|cff00c7ffVoidSweep|r: traffic since %s -- sent: %s | received: %s | not sent, nobody online: %s | offline: %s | refused: %s | old format held back: %s"):format(
+        date("%b %d %H:%M", s.since), list(s.sent), list(s.got), list(s.nobody), list(s.offline), list(s.refused), list(s.held)))
+    if Sync.legacy then print("|cff00c7ffVoidSweep|r: " .. Sync.legacy:Line()) end
 end
 
 function Sync:NetStats(done)

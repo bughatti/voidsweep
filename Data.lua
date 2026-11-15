@@ -128,7 +128,10 @@ end
 function L:GetSharedForMap(mapID) return SharedDB()[mapID] end
 
 -- Returns true if anything changed.
-function L:AddShared(mapID, rec, sender)
+-- sender = who counts as one vote (a salted fingerprint once the swarm runs: the same player by the
+-- old messages and by the swarm counts once); label = the name the tooltip shows as the finder
+-- (an old-format report has one; the swarm doesn't: "another player")
+function L:AddShared(mapID, rec, sender, label)
     local key = keyFor(rec)
     local mine = DB()[mapID]
     if mine and mine[key] then return false end                 -- you know it
@@ -147,7 +150,7 @@ function L:AddShared(mapID, rec, sender)
     local n = 0
     for _ in pairs(db[mapID]) do n = n + 1 end
     if n >= SHARED_CAP then return false end
-    rec.c, rec.f, rec.by, rec.t = 1, sender, { [sender] = true }, time()
+    rec.c, rec.f, rec.by, rec.t = 1, label, { [sender] = true }, time()
     db[mapID][key] = rec
     return true
 end
@@ -242,7 +245,7 @@ function L:GetKnownForMap(mapID)
                     for kk, vv in pairs(v) do c[kk] = vv end
                     merged[k], v = c, c
                 end
-                v.sight = s
+                v.sight, v.sightKey = s, k
             end
         end
     end

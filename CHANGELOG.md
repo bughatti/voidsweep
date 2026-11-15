@@ -1,5 +1,12 @@
 # VoidSweep Changelog
 
+## 0.2.36 — 2026-11-15
+
+- **WoW Forever: rare, treasure and lore spots now spread to everyone**, including players who log in later, over the Void sharing network (the one VoidQuest and VoidDungeon use). Two players' spot still confirms it on your map. You don't need VoidQuest for it.
+- **Kill times stay around.** A rare another Void player killed on your layer shows as killed (with how long ago) even if you logged in after the news went out. A kill on another layer doesn't mark it dead for you.
+- **"Usually back after about 30 min."** When Void players see a rare come back after a kill, the time it was down is shared. Once two players agree, the rare's tooltip says how long it usually stays down.
+- **Players on older versions keep working.** Once no older VoidSweep has been seen for 30 days, the old spot messages stop by themselves (they start again if one shows up). `/vsw net` shows when one was last heard. Live "it's up" alerts and the players-here count work as before.
+
 ## 0.2.35 — 2026-11-14
 
 - The shared layer network now passes along how many players each Void player has seen on its layer (VoidLayer shows the quietest layer from it), and as a group leader VoidSweep re-invites a member who asks to rejoin onto your layer (VoidLayer's Rejoin button). Nothing else changes in VoidSweep.

@@ -138,7 +138,15 @@ function VoidSweepPinMixin:OnMouseEnter()
             GameTooltip:AddLine(("UP · seen %s ago%s"):format(ago, by), 0.3, 1, 0.3)
         else
             GameTooltip:AddLine(("Killed %s ago%s"):format(ago, by), 1, 0.45, 0.45)
-            GameTooltip:AddLine("Rares come back after a while: check again later.", 0.6, 0.6, 0.6)
+            -- how long it's usually down, from players who saw it come back (the swarm)
+            local mins, n, own
+            if VS.Sightings.Respawn then mins, n, own = VS.Sightings:Respawn(e.sight.mapID or 0, e.sightKey) end
+            if mins then
+                local who = own and "your own look" or ("%d players"):format(n or 2)
+                GameTooltip:AddLine(("Usually back after about %d min (%s)"):format(mins, who), 0.6, 0.85, 1)
+            else
+                GameTooltip:AddLine("Rares come back after a while: check again later.", 0.6, 0.6, 0.6)
+            end
         end
         -- WoW Forever: was that on your layer?
         local lt = VS.Sightings.LayerText and VS.Sightings:LayerText(e.sight.mapID, e.sight.layer) or ""

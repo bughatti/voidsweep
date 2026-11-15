@@ -24,6 +24,7 @@ local UP_TTL    = 300     -- an "up" sighting shows for this long
 local KEEP      = 7200    -- a kill is remembered this long
 local RESEND    = 60      -- don't resend the same rare (same state) within this
 local TOL       = 0.08    -- a shared sighting must be this close to the rare's spot
+local CORPSE    = 300     -- a dead rare seen again within this long is the same corpse (same kill)
 
 local byName                -- name -> { { mapID, key, x, y }, ... } from the seed
 local lastSent = {}         -- name .. state -> GetTime()
@@ -113,14 +114,117 @@ local function store(e, dead, who, layer)
     end
 end
 
+----------------------------------------------------------------------
+-- Kill times and respawn windows over the swarm (2026-11-15, stage 5; WoW Forever only). The live
+-- "up" / "killed" news above reaches only who's online right then and is gone after 2 hours; the
+-- swarm keeps it for anyone logging in later, per layer (a kill on another layer isn't yours):
+--   k  piece = map, key = "<rare key>@<layer server number>" ("?" unknown), value = kill time (epoch)
+--      newest wins; one player is enough (like the live news); must be a known rare on that map
+--      and within the last 2 hours
+--   p  piece = map, key = rare key, value = minutes it was back after a kill (bucketed);
+--      2 players; "usually back after about X min"
+-- An old-format kill report from another player also counts as a swarm vote.
+----------------------------------------------------------------------
+local RESPAWN = { 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480 }
+local RESPAWN_OK = {}
+for _, b in ipairs(RESPAWN) do RESPAWN_OK[tostring(b)] = true end
+local function bucket(min) for _, b in ipairs(RESPAWN) do if min <= b then return b end end end
+local function swNet()
+    if VS.Config and VS:Config().sync == false then return nil end   -- sharing off: no swarm kills or respawns
+    return S.swarmOn and VoidSwarm and VoidSwarm.Get and VoidSwarm.Get() or nil
+end
+local function layerNum(layer) return layer and (tostring(layer):match("^(%d+)") or "?") or "?" end
+local function killKey(key, layer) return key .. "@" .. layerNum(layer) end
+local function seedRare(mapID, key)
+    local s = VS.Seed and VS.Seed[mapID] and VS.Seed[mapID][key]
+    return s and s.kind == "rare" and s or nil
+end
+S.KillKey, S.Bucket = killKey, bucket
+
+function S:SwarmBridge()
+    if S.swarmOn or not (VoidSwarm and VoidSwarm.Want) then return end
+    S.swarmOn = true
+    VoidSweepDB = VoidSweepDB or {}
+    VoidSweepDB.swarmK = VoidSweepDB.swarmK or {}
+    VoidSweepDB.swarmP = VoidSweepDB.swarmP or {}
+    -- /vsw sync off: kill times and respawns stay on this PC (nothing sent or taken)
+    local function paused() return VS.Config and VS:Config().sync == false end
+    VoidSwarm.Want("k", { need = 1, newest = true, store = VoidSweepDB.swarmK, maxPieces = 200, maxKeys = 300,
+        paused = paused,
+        valid = function(piece, key, value)
+            local m, t = tonumber(piece), tonumber(value)
+            local rk = key:match("^(n.+)@[%d%?]+$")
+            return m and rk and seedRare(m, rk) and value:match("^%d+$") and t >= time() - KEEP and t <= time() + 120 and true or false
+        end,
+        onTake = function() if VS.Pins and VS.Pins.Refresh then VS.Pins:Refresh() end end })
+    VoidSwarm.Want("p", { need = 2, store = VoidSweepDB.swarmP, maxPieces = 200, maxKeys = 300,
+        paused = paused,
+        valid = function(piece, key, value)
+            local m = tonumber(piece)
+            return m and seedRare(m, key) and RESPAWN_OK[value] and true or false
+        end })
+end
+
+-- the newest kill time the swarm knows for this rare on your layer (epoch), or nil
+local function swKill(mapID, key)
+    local net = swNet()
+    if not net then return nil end
+    local layer = myLayer(mapID)
+    local v = net:Get("k", tostring(mapID), killKey(key, layer))
+    return tonumber(v), layer
+end
+
+-- how long this rare is usually down: minutes, players, yours (nil = not known yet; your own
+-- sample comes back with no player count)
+function S:Respawn(mapID, key)
+    local net = swNet()
+    if not net then return nil end
+    local v, n, own = net:Get("p", tostring(mapID), key)
+    return tonumber(v), n, own
+end
+
 -- { t, dead, by, age } for a seed key on a map, or nil when stale.
 function S:Get(mapID, key)
     local m = DB()[mapID]
     local s = m and m[key]
+    local kt, klayer = swKill(mapID, key)
+    -- a kill the swarm knows (on your layer) that's newer than anything you have
+    if kt and time() - kt <= KEEP and (not s or (s.t or 0) < kt) then
+        return { t = kt, dead = true, by = "another Void player", age = time() - kt, up = false, layer = klayer, mapID = mapID }
+    end
     if not s then return nil end
     local age = time() - (s.t or 0)
     if age > KEEP or (not s.dead and age > UP_TTL) then return nil end
     return { t = s.t, dead = s.dead, by = s.by, age = age, up = not s.dead, layer = s.layer, mapID = mapID }
+end
+
+-- your own sighting -> the swarm: a kill goes out; seeing it up again after a known kill on the
+-- same layer is a respawn sample
+local function swOwn(e, dead, layer)
+    local net = swNet()
+    if not (net and seedRare(e.mapID, e.key)) then return end
+    if dead then
+        net:Report("k", tostring(e.mapID), killKey(e.key, layer), tostring(time()))
+        return
+    end
+    local m = DB()[e.mapID]
+    local s = m and m[e.key]
+    local kt = s and s.dead and layerNum(s.layer) == layerNum(layer) and s.t or nil
+    local skt = tonumber((net:Get("k", tostring(e.mapID), killKey(e.key, layer))))
+    if skt and (not kt or skt > kt) then kt = skt end
+    if not kt then return end
+    -- already seen up since that kill: one sample per kill (a later look while it's still up
+    -- would claim a longer respawn each time)
+    if s and not s.dead and (s.t or 0) >= kt then return end
+    local mins = (time() - kt) / 60
+    if mins >= 2 and mins <= 480 then net:Report("p", tostring(e.mapID), e.key, tostring(bucket(mins))) end
+end
+
+-- another player's old-format kill report -> one swarm vote
+local function swFeedKill(mapID, key, layer, sender)
+    local net = VoidSwarm and VoidSwarm.net
+    if not (S.swarmOn and net and net.io and net.io.hash and sender) then return end
+    pcall(net.take, net, "k", tostring(mapID), killKey(key, layer), tostring(time()), net.io.hash(sender))
 end
 
 local function share(e, name, dead, layer)
@@ -187,6 +291,11 @@ local function check(unit)
     local cur = S:Get(e.mapID, e.key)
     if cur and cur.dead == (dead or nil) and cur.by == nil and cur.age < 30 then return end
     local layer = myLayer(e.mapID)   -- you see it, so it's on your layer
+    -- the same corpse again (a kill already known on your layer, yours or another Void player's,
+    -- within CORPSE): it keeps its first kill time. Re-stamping it "now" would move the kill later
+    -- for everyone and make respawns look shorter (Codex release review)
+    if dead and cur and cur.dead and cur.age < CORPSE and layerNum(cur.layer) == layerNum(layer) then return end
+    swOwn(e, dead, layer)   -- before store: a respawn sample needs the kill it follows
     store(e, dead, nil, layer)
     share(e, name, dead, layer)
 end
@@ -219,6 +328,7 @@ function S:OnShared(body, sender, version)
     -- doesn't mean it's dead here)
     if cur and S:LayerMatch(mapID, cur.layer) == "same" and S:LayerMatch(mapID, layer) == "other" then return end
     store({ mapID = mapID, key = key }, dead, sender or "another player", layer)
+    if dead then swFeedKill(mapID, key, layer, sender) end
     if not dead then
         local zone = C_Map.GetMapInfo(mapID)
         local lt = S:LayerText(mapID, layer)
