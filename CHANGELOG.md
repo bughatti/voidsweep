@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.38 — 2026-11-15
+
+- **A Hop nobody could do now says why:** how many Void players on that layer were asked, and for each, whether they were in a group or fighting, had moved off that layer, had helping others turned off, or didn't answer. A player who moved off is no longer offered for that layer.
+
 ## 0.2.37 — 2026-11-15
 
 - **Credits:** the game data this addon ships is now called **VoidDB**; full credits and licences of the open data in it are in NOTICE.txt and the README.

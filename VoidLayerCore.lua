@@ -608,7 +608,20 @@ function ns.LayerCoreBuild(owner)
         state.idx = state.idx + 1
         local h = state.hosts[state.idx]
         if not h then
-            stop("nobody on that layer could bring you over right now. Try again in a bit.")
+            -- say why, else a failed Hop looks broken (the user, 2026-11-15, Durotar: two Hops to a
+            -- rare's layer, both "nobody could bring you over", no reason)
+            local n, parts = 0, {}
+            for _, k in ipairs({ "busy", "layer", "off", "none" }) do
+                local c = state.why and state.why[k] or 0
+                n = n + c
+                if c > 0 then
+                    parts[#parts + 1] = ("%d %s"):format(c, k == "busy" and "in a group, in combat or just helped someone"
+                        or k == "layer" and "no longer on that layer" or k == "off" and "has Help others off"
+                        or "didn't answer (offline or out of reach)")
+                end
+            end
+            stop(n > 0 and ("nobody on that layer could bring you over right now. Asked %d: %s. Try again in a bit."):format(n, table.concat(parts, ", "))
+                or "nobody on that layer could bring you over right now. Try again in a bit.")
             return
         end
         state.host, state.pair, state.phase, state.extended, state.seenHost = h.name, h.pair, "asking", nil, nil
@@ -616,7 +629,11 @@ function ns.LayerCoreBuild(owner)
         send(("HR:1:%d:%s:%s"):format(state.zone, (rawOf[h.name] and canon(rawOf[h.name]) == state.pair) and rawOf[h.name] or state.pair, state.nonce), h.name, true)
         local asked1 = h.name
         setTimer(ASK_WAIT, function()
-            if state and state.phase == "asking" and state.host == asked1 then nextHost() end
+            if state and state.phase == "asking" and state.host == asked1 then
+                state.why = state.why or {}
+                state.why.none = (state.why.none or 0) + 1
+                nextHost()
+            end
         end)
         changed()
     end
@@ -839,7 +856,16 @@ function ns.LayerCoreBuild(owner)
         elseif tag == "HA" then
             local nonce, answer = msg:match("^HA:1:(%d+):(.+)$")
             if not (state and state.phase == "asking" and who == state.host and nonce == state.nonce) then return end
-            if answer ~= "ok" then nextHost() end
+            if answer ~= "ok" then
+                local k = answer:match("^no:(%a+)$")
+                k = (k == "busy" or k == "layer" or k == "off") and k or "busy"
+                state.why = state.why or {}
+                state.why[k] = (state.why[k] or 0) + 1
+                -- moved off that layer: what they told us before is stale, so they stop being offered
+                local c = census[state.zone] and census[state.zone][who]
+                if k == "layer" and c and c.pair == state.pair then census[state.zone][who] = nil; changed() end
+                nextHost()
+            end
         elseif tag == "GQ" or tag == "GL" or tag == "RJ" or tag == "RA" then
             if onGroupMsg then onGroupMsg(tag, msg, who) end
         end
