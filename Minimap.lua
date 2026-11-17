@@ -21,7 +21,8 @@ local MM = VS.Minimap
 -- per-frame work is only arithmetic + SetPoint on the cached pin list; the heavy
 -- assembly (VS.Pins:Build) still runs at most every REBUILD seconds.
 local REBUILD    = 1.5   -- how often to re-run the (heavier) pin assembly
-local PIN_SIZE   = 13
+local PIN_SIZE   = 9    -- px, like VoidGather's minimap pins (2026-11-17: 13 hid the terrain; "cant be this big")
+local MM_ALPHA   = 0.7  -- VoidGather's default minimap opacity
 
 local pool = {}          -- texture pool parented to Minimap
 local nActive = 0
@@ -80,7 +81,8 @@ function MM:Update()
 
     local t = GetTime()
     for _, c in ipairs(pins(mapID, t)) do
-        if not c.isLive then                       -- Blizzard minimaps live ones
+        -- Blizzard minimaps live ones; possible chest spots (Chests.lua) stay off the minimap
+        if not c.isLive and not c.entry.mmHide then
             local sx = (c.x - px) * w * scale       -- east = +x on minimap
             local sy = -((c.y - py) * h) * scale    -- north = up (map y is south)
             if rotate then
@@ -92,15 +94,10 @@ function MM:Update()
                     or (c.entry.heat and VS.SpawnSpotColor)
                     or VS.CategoryColor[c.entry.kind] or VS.CategoryColor.default
                 p:SetVertexColor(col[1], col[2], col[3])
-                local killed = VS.Respawns[c.entry.kind] and VS:IsDone(c.entry)
-                if c.entry.confirmed then        -- confirmed delve spawn spot: solid dark green
-                    p:SetAlpha(1.0); p:SetSize(PIN_SIZE + 1, PIN_SIZE + 1)
-                elseif c.entry.heat then         -- unconfirmed: faded light blue
-                    p:SetAlpha(0.45); p:SetSize(PIN_SIZE - 2, PIN_SIZE - 2)
-                else
-                    p:SetAlpha(c.entry.reported and 0.95 or (killed or c.entry.shared) and 0.4 or 0.8)
-                    p:SetSize(PIN_SIZE, PIN_SIZE)
-                end
+                -- one size, one brightness for every dot (2026-11-17, "there is no need for that"):
+                -- what a dot is, is its color; the tooltip on the world map says the rest
+                p:SetAlpha(MM_ALPHA)
+                p:SetSize(PIN_SIZE, PIN_SIZE)
                 p:ClearAllPoints()
                 p:SetPoint("CENTER", Minimap, "CENTER", sx, sy)
             end

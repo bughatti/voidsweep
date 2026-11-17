@@ -207,6 +207,12 @@ function Sync:OnMessage(payload, sender)
         if rateOK(sender) and VS.Sightings then VS.Sightings:OnShared(sn, sender, tonumber(snv)) end
         return
     end
+    -- a WoW Forever chest seen or opened (Chests.lua validates it against the listed spots)
+    local ch = payload:match("^CH:1:(.+)$")
+    if ch then
+        if rateOK(sender) and VS.Chests then VS.Chests:OnShared(ch, sender) end
+        return
+    end
     local proto, body = payload:match("^UP:(%d+):(.+)$")
     if proto ~= PROTO then return end
 

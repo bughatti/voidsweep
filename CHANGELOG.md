@@ -1,5 +1,12 @@
 # VoidSweep Changelog
 
+## 0.2.41 — 2026-11-17
+
+- **WoW Forever: treasure chests and supplies on your map.** Forever has no chest markers, so VoidSweep never showed one. Now it sees a chest the way you do: hover it, walk up to it or open it. Battered and Solid Chests, footlockers, strongboxes and the rest get a yellow dot; supplies (Food Crates, barrels of milk and water, Weapon and Armor Crates) their own pink one and their own switch in the map menu.
+- A chest seen in the last 15 minutes (by you or another Void player) gets the white ring, with **Locked** from its tooltip or because you just picked its lock; one somebody opened says so for 30 minutes. Opening one where nobody knew a chest could be adds that spot to your map. Every place one can appear (from VoidDB) is off by default: map menu **Possible spots**, or `/vsw chests`.
+- **Smaller dots, all alike:** every dot is now the same small size and brightness on the world map and the minimap (like VoidGather); a thin white ring means it's up right now, and hovering a dot says the rest.
+- WoW Forever: the vignette scanner no longer runs there (Forever has none).
+
 ## 0.2.40 — 2026-11-17
 
 - **Layer helping finds players faster (WoW Forever).** A layer question now reaches the Void players it asks in about a second instead of eleven, so Refresh and hops see the other layers right away. Same message rate over time, well under the game's limit.

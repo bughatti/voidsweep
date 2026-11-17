@@ -10,6 +10,7 @@
 local ADDON, VS = ...
 
 local PIN_TEMPLATE = "VoidSweepPinTemplate"
+local PIN_ALPHA = 0.9   -- every dot the same (2026-11-17)
 
 -- Rares and world bosses respawn: even when flagged "done" (a daily kill
 -- quest) they stay on the map — dimmed when not up, bright when up — instead
@@ -21,6 +22,7 @@ VS.Respawns = RESPAWNS
 local KIND_LABEL = {
     rare       = "Rare",
     chest      = "Treasure",
+    supply     = "Supplies",
     worldboss  = "World Boss",
     lore       = "Lore",
     mount      = "Mount",
@@ -64,30 +66,22 @@ function VoidSweepPinMixin:OnAcquired(entry, x, y, isLive)
     applyDot(self.icon, entry)
     -- color = category (set above); alpha/size = state.
     local sight = entry.sight                     -- seen on a nameplate / target lately (Sightings.lua)
-    local up = entry.reported or isLive or (sight and sight.up)   -- UP right now: seen live or reported
-    if entry.reported then
-        self:SetAlpha(0.95); self:SetSize(15, 15)   -- crowd-reported
-    elseif sight and sight.up then
-        self:SetAlpha(1.0);  self:SetSize(14, 14)   -- seen up (by you or another player)
-    elseif sight and sight.dead then
-        self:SetAlpha(0.3);  self:SetSize(11, 11)   -- killed lately
-    elseif isLive then
-        self:SetAlpha(1.0);  self:SetSize(14, 14)   -- up, you're near it
-    elseif entry.confirmed then                      -- confirmed delve spawn spot: solid dark green
-        self:SetAlpha(1.0);  self:SetSize(14, 14)
-    elseif entry.heat then                           -- unconfirmed spawn spot: faded light blue
-        self:SetAlpha(0.45); self:SetSize(11, 11)
-    elseif entry.shared then                         -- another player's spot
-        self:SetAlpha((entry.c or 1) >= 2 and 0.45 or 0.3); self:SetSize(10, 10)
-    elseif RESPAWNS[entry.kind] and VS:IsDone(entry) then
-        self:SetAlpha(0.3);  self:SetSize(11, 11)   -- killed before, not up
+    local chest = entry.chestState                -- WoW Forever chests (Chests.lua)
+    local up = entry.reported or isLive or (sight and sight.up) or chest == "up"   -- UP right now: seen live or reported
+    -- One size and ONE brightness for every dot (the user, 2026-11-17: "these dots cant be this big"
+    -- = VoidGather's 9 px; "why are some dots brighter than others, there is no need for that"). The
+    -- white ring alone says "it's up right now"; the tooltip says the rest (killed, opened, whose).
+    -- Only WoW Forever's possible chest / supply spots (off by default) are smaller, so a spot that
+    -- might hold one never looks like one that does.
+    self:SetAlpha(PIN_ALPHA)
+    if chest == "possible" then
+        self:SetSize(6, 6)
     else
-        self:SetAlpha(0.5);  self:SetSize(12, 12)   -- known / not up
+        self:SetSize(9, 9)
     end
-    -- white border = "it's up" (whether you saw it or VoidSync told you).
-    -- +8 => ~4px of white shows around the dot; bump for a thicker border.
+    -- white border = "it's up" (whether you saw it or VoidSync told you): a thin 2 px edge
     if up then
-        self.ring:SetSize(self:GetWidth() + 8, self:GetHeight() + 8)
+        self.ring:SetSize(self:GetWidth() + 4, self:GetHeight() + 4)
         self.ring:Show()
     else
         self.ring:Hide()
@@ -107,7 +101,9 @@ function VoidSweepPinMixin:OnMouseEnter()
     GameTooltip:AddLine(e.name or "Unknown", 1, 1, 1)
     GameTooltip:AddLine(KIND_LABEL[e.kind] or "Point of Interest", 0.6, 0.8, 1)
 
-    if e.reported then
+    if e.chestSpot and VS.Chests then
+        VS.Chests:TooltipLines(e, function(...) GameTooltip:AddLine(...) end)
+    elseif e.reported then
         local s = e.senders or 1
         GameTooltip:AddLine(("|cff77ccffReported UP|r by %d player%s · %ds ago"):format(
             s, s == 1 and "" or "s", e.age or 0), 0.45, 0.75, 1)
@@ -199,7 +195,7 @@ end
 -- both a rare vignette and an event POI should show once, as the rare).
 local KIND_RANK = {
     worldboss = 10, rare = 9, mount = 8, pet = 7, toy = 6,
-    decor = 5, profession = 4, chest = 3, lore = 2, junk = 1,
+    decor = 5, profession = 4, chest = 3, supply = 3, lore = 2, junk = 1,
 }
 
 function VoidSweepDataProviderMixin:RefreshAllData()
@@ -300,20 +296,29 @@ function VS.Pins:Build(mapID)
             consider(c.entry, c.x, c.y, false)
         end
     end
-    -- Live vignettes, bright. Skip any whose known twin is completed.
-    for _, entry in ipairs(VS.Scanner:GetLive()) do
-        local pos = C_VignetteInfo.GetVignettePosition(entry.guid, mapID)
-        if pos then
-            local x, y = pos:GetXY()
-            if not doneKeys[dedupKey(entry, x, y)] then
-                consider(entry, x, y, true)
-            end
+    -- WoW Forever chests (Chests.lua): seen lately, opened, your own spots, possible spots if on
+    if VS.Chests then
+        for _, c in ipairs(VS.Chests:Candidates(mapID)) do
+            consider(c.entry, c.x, c.y, false)
         end
     end
-    -- Zone-wide Area POIs (world bosses + events), bright.
-    for _, poi in ipairs(VS.Poi:Scan(mapID)) do
-        if not doneKeys[dedupKey(poi, poi.x, poi.y)] then
-            consider(poi, poi.x, poi.y, true)
+    -- Live vignettes and area POIs: not on WoW Forever, which has neither (2026-11-17)
+    if not VS.FOREVER then
+        -- Live vignettes, bright. Skip any whose known twin is completed.
+        for _, entry in ipairs(VS.Scanner:GetLive()) do
+            local pos = C_VignetteInfo.GetVignettePosition(entry.guid, mapID)
+            if pos then
+                local x, y = pos:GetXY()
+                if not doneKeys[dedupKey(entry, x, y)] then
+                    consider(entry, x, y, true)
+                end
+            end
+        end
+        -- Zone-wide Area POIs (world bosses + events), bright.
+        for _, poi in ipairs(VS.Poi:Scan(mapID)) do
+            if not doneKeys[dedupKey(poi, poi.x, poi.y)] then
+                consider(poi, poi.x, poi.y, true)
+            end
         end
     end
     -- Crowd reports (VoidSync): "UP right now", so they replace a remembered

@@ -56,6 +56,7 @@ end
 
 function Scanner:Rescan()
     wipe(self.live)
+    if VS.FOREVER then return end   -- WoW Forever has no vignettes (0 on 38 maps, 2026-11-17)
     if not C_VignetteInfo or not C_VignetteInfo.GetVignettes then return end
 
     -- map we're standing on — used to resolve each vignette's position so

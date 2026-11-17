@@ -17,6 +17,8 @@ local CATS = {
     { key = "chest",      label = "Treasures" },
     { key = "lore",       label = "Lore" },
 }
+-- WoW Forever: supply containers (Food Crate, Water Barrel, Weapon Crate ...; Chests.lua), their own category
+if VS.Chests then table.insert(CATS, 4, { key = "supply", label = "Supplies" }) end
 
 local function refresh()
     return MenuResponse and MenuResponse.Refresh   -- keep the menu open on toggle
@@ -39,8 +41,16 @@ local function countsForViewedMap()
             end
         end
     end
-    -- live ones only if they're on the viewed map and not already counted above
-    for _, e in ipairs(VS.Scanner:GetLive()) do
+    -- WoW Forever chests seen lately (Chests.lua) count as treasures here
+    if VS.Chests then
+        for _, k in ipairs({ "chest", "supply" }) do
+            local up = VS.Chests:Count(mapID, k)
+            total[k] = (total[k] or 0) + up
+            need[k] = (need[k] or 0) + up
+        end
+    end
+    -- live ones only if they're on the viewed map and not already counted above (none on Forever)
+    for _, e in ipairs(VS.FOREVER and {} or VS.Scanner:GetLive()) do
         if not (e.vignetteID and knownVid[e.vignetteID])
            and e.guid and C_VignetteInfo.GetVignettePosition(e.guid, mapID) then
             total[e.kind] = (total[e.kind] or 0) + 1
@@ -80,8 +90,16 @@ local function generator(_, root)
         return ("|TInterface\\Buttons\\WHITE8X8:10:10:0:0:8:8:0:8:0:8:%d:%d:%d|t"):format(
             math.floor(g[1] * 255), math.floor(g[2] * 255), math.floor(g[3] * 255))
     end
-    root:CreateTitle(sw(VS.SpawnSpotColor) .. "  Light blue = delve treasure seen here once or twice")
-    root:CreateTitle(sw(VS.ConfirmedSpawnColor) .. "  Dark green = confirmed delve treasure spot (3+ visits)")
+    if VS.Chests then
+        -- WoW Forever: chests are seen by players (no game markers there), so their spots are a choice
+        root:CreateCheckbox("Possible spots (where a chest or supply can appear)",
+            function() return cfg.chestSpots == true end,
+            function() VS.Chests:ToggleSpots(); return refresh() end)
+        root:CreateTitle("Bright = seen in the last 15 min (by you or a Void player)")
+    else
+        root:CreateTitle(sw(VS.SpawnSpotColor) .. "  Light blue = delve treasure seen here once or twice")
+        root:CreateTitle(sw(VS.ConfirmedSpawnColor) .. "  Dark green = confirmed delve treasure spot (3+ visits)")
+    end
 
     root:CreateDivider()
     root:CreateCheckbox("Show completed",
