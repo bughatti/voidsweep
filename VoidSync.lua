@@ -101,6 +101,13 @@ joinRetry:SetScript("OnEvent", function(self)
 end)
 
 function Sync:JoinNet()
+    -- Forever since 2026-11-17: the one channel (VoidNet.lua) joins the shared channel and keeps the old
+    -- VoidSweep channel only while players on an old version are on it
+    if daily and net and net.Join then
+        net:Join()
+        C_Timer.After(5, function() if Sync.Publish then Sync.Publish() end end)   -- refused -> "blocked"
+        return
+    end
     -- Forever: out of the old channels first, so their slots are free for the new one (Codex
     -- review). A banned one can't be left; it goes at logout.
     if daily and not chatLocked() then
@@ -676,9 +683,11 @@ local function publish()
     if not _G.VoidPresence then return end
     local note = enabled() and VS.WhisperNet and VS.WhisperNet.BlockNote(CHANNEL_NAME) or nil
     if net then
-        -- Forever: players online on the channel (no zone counts without channel messages)
-        local others = net:Others()
-        VoidPresence:Set("VoidSweep", "VoidSweep online", others or 0, false, enabled() and others ~= nil, note)
+        -- Forever: the one channel every Void addon shares is "VoidNet" in the box (2026-11-17; the old
+        -- "VoidSweep online" line is gone). Sharing off: leave the line to another Void addon.
+        if not enabled() then return end
+        local void = net.Void and net:Void() or net:Others()
+        VoidPresence:Set("VoidNet", "VoidNet", void or 0, false, void ~= nil, note)
         return
     end
     local n = 0
@@ -988,7 +997,15 @@ function Sync:Init()
         -- 2026-11-09: "get rid of the offline list"); the old saved list is deleted
         VoidSweepDB = VoidSweepDB or {}
         VoidSweepDB.netOffline = nil
-        net = Net.New(CHANNEL_NAME, publish, {})
+        -- the one channel (VoidNet.lua, 2026-11-17): the swarm's channel is the member list; the old VoidSweep
+        -- channel ("Vs") stays while players on an old version are on it, 30 days after the last one
+        if VS.VoidNet then
+            net = VS.VoidNet.New({ prefix = PREFIX, legacy = { tag = DAILY_TAG, salt = DAILY_SALT },
+                                   db = VoidSweepDB, onRoster = publish })
+            CHANNEL_NAME = net:Channel()
+        else
+            net = Net.New(CHANNEL_NAME, publish, {})
+        end
         -- a whisper that came back "No player named X" (2026-11-10: the other faction's were all
         -- that, and nothing counted them)
         net.onBounce = function() tally("offline", "whisper") end
@@ -1018,6 +1035,11 @@ function Sync:Init()
     -- Forever: at 00:00 UTC everyone moves to the new day's channel together
     if daily then
         C_Timer.NewTicker(60, function()
+            if net and net.Day then
+                -- VoidNet follows the new day's channels and drops the old one when it's time
+                if net:Day() then CHANNEL_NAME = net:Channel(); publish() end
+                return
+            end
             local name, pw = Net.DailyChannel(DAILY_TAG, DAILY_SALT)
             if name == CHANNEL_NAME then return end
             local old = CHANNEL_NAME
@@ -1061,6 +1083,7 @@ function Sync:Init()
             return
         end
         if who ~= me then
+            if net and net.Heard and net:Heard(who) == false then return end   -- hostile (VoidNet): dropped; else a VoidSweep user
             tally("got", msg)
             if not net or Sync.heard[who] or Sync.heardPeople < HEARD_MAX then   -- cap: Forever only
                 if not Sync.heard[who] then Sync.heardPeople = Sync.heardPeople + 1 end

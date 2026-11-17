@@ -1,5 +1,11 @@
 # VoidSweep Changelog
 
+## 0.2.39 — 2026-11-17
+
+- **VoidNet: one hidden channel for every Void addon (WoW Forever).** VoidLayer, VoidSweep, VoidQuest, VoidGather, VoidBounty and VoidDungeon now share ONE channel instead of one each. The Void players box shows **VoidNet** (every Void addon player online, each counted once) with **Layer helpers** under it. Players on an older version are still reached through the old channel, which goes away 30 days after the last of them updates.
+- **Harder to grief:** the channel name changes every hour, with backups. If someone takes the channel over, bans or kicks Void players, or changes its password, every Void addon moves to the backup and ignores that player for 24 hours (a report from others counts only when 3 different Void players saw it). Nothing is shown as a list of names.
+- **Help others change layer** moved to the hub's single **Help Void layer hopping** switch (the same one every Void addon uses).
+
 ## 0.2.38 — 2026-11-15
 
 - **A Hop nobody could do now says why:** how many Void players on that layer were asked, and for each, whether they were in a group or fighting, had moved off that layer, had helping others turned off, or didn't answer. A player who moved off is no longer offered for that layer.

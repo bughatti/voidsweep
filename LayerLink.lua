@@ -69,13 +69,4 @@ migrate:SetScript("OnEvent", function(self, _, name)
     end
 end)
 
--- Void hub quick box switch (only when VoidLayer isn't installed: it has the same one)
-if not (loaded and loaded("VoidLayer")) then
-    VoidHubToggles = VoidHubToggles or {}
-    table.insert(VoidHubToggles, {
-        id = "VoidSweep.host", group = "Sweep", label = "Help others change layer",
-        tip = "WoW Forever: Void players on your layer can ask you for a quick group invite (only while you're solo and out of combat; the group ends on its own).",
-        get = function() return forever() and VS.Hop:HostingOn() or false end,
-        set = function(on) VS.Hop:SetHosting(on) end,
-    })
-end
+-- the hub's "Help Void layer hopping" switch now comes from LayerHelp.lua (one switch for every Void addon)

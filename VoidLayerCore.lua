@@ -43,7 +43,7 @@ local ADDON, ns = ...
 -- 2: a hop counts any move off your layer; the hop group is always left (2026-11-10)
 -- 3: one channel per faction, so this core must win over an older copy's both-factions one (2026-11-10)
 -- 4: layer names from the layer's own number, the same for every player (2026-11-14)
-local CORE_VERSION = 7   -- 5 (2026-11-14): layer = server number only (canon); 6: S, players seen per layer; 7: group rejoin (GQ/GL/RJ/RA)
+local CORE_VERSION = 9   -- 9 (2026-11-17): VoidNet, the one channel + Help switch in every Void addon; 5 (2026-11-14): layer = server number only (canon); 6: S, players seen per layer; 7: group rejoin (GQ/GL/RJ/RA); 8: hosting from a Group Finder listing
 
 local reg = _G.VoidLayerCoreReg or { list = {} }
 _G.VoidLayerCoreReg = reg
@@ -67,7 +67,9 @@ function ns.LayerCoreBuild(owner)
 
     local PREFIX        = "VLAYER"
     local DAILY_TAG, DAILY_SALT = "Vl", 58313
-    local SEND_EVERY    = 0.6
+    -- 1.1 s (was 0.6): the game allows ~10 addon messages at once, then ~1 a second per prefix; at 0.6 s a
+    -- busy queue had sends refused (vnet-sim 2026-11-16: ~2,600 refused an hour at 2,000 players per addon)
+    local SEND_EVERY    = 1.1
     local QUEUE_MAX     = 60
     local SENDER_MAX    = 20      -- messages accepted per player per minute
     -- census
@@ -113,36 +115,80 @@ function ns.LayerCoreBuild(owner)
     local function changed() for _, fn in ipairs(listeners) do pcall(fn) end end
     function C:OnChange(fn) listeners[#listeners + 1] = fn end
 
+    -- Hop health (2026-11-16, the user: "start on 5"): how hops end, how long they take, how hosting goes.
+    -- Saved per character, never any names: totals + the last 50. /vl stats. A table field, not a local:
+    -- LayerCoreBuild is at Lua 5.1's local/register limit.
+    function C.hlog(result, st, extra)
+        if st and st.test then return end
+        local s = S()
+        s.hopStats = type(s.hopStats) == "table" and s.hopStats or {}
+        s.hopStats[result] = (tonumber(s.hopStats[result]) or 0) + 1
+        if result == "start" then return end   -- a total only; the log keeps how hops ended
+        s.hopLog =type(s.hopLog) == "table" and s.hopLog or {}
+        local e = { t = time(), r = result }
+        if st then
+            e.z = st.zone
+            if st.t0 then e.s = math.floor(GetTime() - st.t0 + 0.5) end
+            if st.idx and st.idx > 0 then e.a = st.idx end
+        end
+        if extra then e.x = extra end
+        table.insert(s.hopLog, e)
+        while #s.hopLog > 50 do table.remove(s.hopLog, 1) end
+    end
+    function C.hunlog(result)
+        local t = S().hopStats
+        if type(t) == "table" and (tonumber(t[result]) or 0) > 0 then t[result] = t[result] - 1 end
+    end
+    -- An invite from a player listed in the Group Finder shows LFGInvitePopup (role icons), not PARTY_INVITE:
+    -- live 11-16 it stayed on screen after AcceptGroup(). Close it too when we accept or decline ourselves.
+    function C.hideLfgPopup()
+        local p = _G.LFGInvitePopup
+        if p and p.IsShown and p:IsShown() and StaticPopupSpecial_Hide then pcall(StaticPopupSpecial_Hide, p) end
+    end
+    function C:HopStats()
+        local s = S()
+        return type(s.hopStats) == "table" and s.hopStats or {}, type(s.hopLog) == "table" and s.hopLog or {}
+    end
+
     ------------------------------------------------------------------
     -- Channel + whisper transport
     ------------------------------------------------------------------
-    -- one channel per faction since 2026-11-10 (WhisperNet.lua): whispers don't cross factions
-    -- and neither do hop groups. OLD = yesterday's and the old both-factions ones, to leave.
-    local CHANNEL, PW, today = Net.DailyChannel(DAILY_TAG, DAILY_SALT)
-    local OLD = Net.OldDailyChannels(DAILY_TAG, DAILY_SALT, today)
-    -- offline marks (players whose whisper bounced): this session only, never saved (the user,
-    -- 2026-11-09: "get rid of the offline list"; the README says no names are saved). After a
-    -- reload the online count can include a player who just logged off until their whisper bounces.
-    local offlineMarks = {}
+    -- ONE channel since 2026-11-17 (VoidNet.lua, the user: "build the one channel move starting with
+    -- voidlayer and voidsweep"): the swarm's daily per-faction channel is the member list for every Void
+    -- addon; the old layer channel ("Vl") stays while players on an old version are on it, and goes 30
+    -- days after the last one. Messages are unchanged, so old and new versions keep hopping together.
+    -- Offline marks (bounced whispers) stay session only (the user, 2026-11-09: no names saved).
     -- Members seen in any read of the list this session: a busy channel (over 300) is read a
     -- random window at a time, so one read isn't everyone (Sol review).
     local everPeer, everN = {}, 0
     local net
-    -- "VoidLayer online" in the Void players box (PresenceBox.lua): members of the layer channel
-    -- (VoidLayer players, and VoidSweep 0.2.25+ players, who share it). Only when VoidLayer runs
-    -- the core: VoidSweep has its own line.
+    -- The Void players box (PresenceBox.lua): "VoidNet" (everyone on the one channel; the user 11-17: "VoidNet" then "Layer helpers" under it) and
+    -- "Layer helpers" (players running the layer engine, less the ones who said Help others is off).
+    -- Only when VoidLayer runs the core: VoidSweep has its own line.
+    C.offNames = {}   -- name -> GetTime() of their "no:off" answer (a table field: locals are at the limit)
     local function publish()
-        if owner.addon ~= "VoidLayer" or not _G.VoidPresence or not net then return end
-        local others = net:Others()
-        _G.VoidPresence:Set("VoidLayer", "VoidLayer online", others or 0, false, others ~= nil, Net.BlockNote(CHANNEL))
-    end
-    net = Net.New(CHANNEL, function()
-        for _, n in ipairs(net and net.roster or {}) do
-            if not everPeer[n] and everN < 3000 then everPeer[n] = true; everN = everN + 1 end
+        -- every Void addon carries the engine now (2026-11-17): the two lines show whichever one runs it
+        if not _G.VoidPresence or not net then return end
+        local note = Net.BlockNote(net:Channel())
+        local void = net:Void()
+        _G.VoidPresence:Set("VoidNet", "VoidNet", void or 0, false, void ~= nil, note)
+        local helpers = net:Others()
+        if helpers then
+            for name, t in pairs(C.offNames) do
+                if GetTime() - t > 3600 then C.offNames[name] = nil else helpers = helpers - 1 end
+            end
+            helpers = math.max(0, helpers)
         end
-        publish()
-        changed()
-    end, offlineMarks)
+        _G.VoidPresence:Set("VoidLayer", "Layer helpers", helpers or 0, false, helpers ~= nil, note)
+    end
+    net = ns.VoidNet.New({ prefix = PREFIX, legacy = { tag = DAILY_TAG, salt = DAILY_SALT }, db = S(),
+        onRoster = function()
+            for _, n in ipairs(net and net.roster or {}) do
+                if not everPeer[n] and everN < 3000 then everPeer[n] = true; everN = everN + 1 end
+            end
+            publish()
+            changed()
+        end })
     if _G.VoidPresence and _G.VoidPresence.Listen then
         _G.VoidPresence:Listen(function() net:RequestRoster(true); publish() end)
     end
@@ -158,31 +204,8 @@ function ns.LayerCoreBuild(owner)
         if not ok or secret(v) then return true end
         return v == true
     end
-    local function joined() local id = GetChannelName(CHANNEL); return id and id > 0 end
-    local joinRetry = CreateFrame("Frame")
-    local function join()
-        if chatLocked() then
-            for _, ev in ipairs({ "PLAYER_REGEN_ENABLED", "ZONE_CHANGED_NEW_AREA", "ENCOUNTER_END" }) do joinRetry:RegisterEvent(ev) end
-            return
-        end
-        for _, old in ipairs(OLD) do
-            if (GetChannelName(old) or 0) > 0 then LeaveChannelByName(old) end
-        end
-        if not joined() then JoinTemporaryChannel(CHANNEL, PW) end
-        C_Timer.After(2, function()
-            if joined() then
-                for i = 1, (NUM_CHAT_WINDOWS or 10) do
-                    local cf = _G["ChatFrame" .. i]
-                    if cf and ChatFrame_RemoveChannel then ChatFrame_RemoveChannel(cf, CHANNEL) end
-                end
-            end
-        end)
-    end
-    joinRetry:SetScript("OnEvent", function(self)
-        if chatLocked() then return end
-        self:UnregisterAllEvents()
-        join()
-    end)
+    -- joining (the one channel, plus the old one while it's needed) lives in VoidNet; it waits out a fight
+    local function join() net:Join() end
 
     -- traffic this session, for /vl net: whispers the game took, refused as offline (result 12),
     -- or refused otherwise. Bounces ("No player named X") are net.bounces.
@@ -223,6 +246,9 @@ function ns.LayerCoreBuild(owner)
 
     local function isPeer(name)
         if everPeer[name] then return true end
+        -- a Void player VoidNet trusted (a channel member heard within the hour, kept over a /reload, never
+        -- hostile): we may be asking them while shut out of the channel, so their answers count (Sol, 2026-11-17)
+        if net.core and net.core.Fresh and net.core:Fresh(name) then return true end
         for _, n in ipairs(net.roster or {}) do if n == name then return true end end
         return false
     end
@@ -253,18 +279,26 @@ function ns.LayerCoreBuild(owner)
     end
 
     function C:Online() return net:Others() end
-    function C:Channel() return CHANNEL end
-    function C:BlockReason() return Net.BlockReason(CHANNEL) end
+    function C:Channel() return net:Channel() end
+    function C:BlockReason() return Net.BlockReason(net:Channel()) end
+    function C:Void() return net:Void() end
+    function C:LegacyInfo() return net:LegacyInfo() end
 
     -- /vl net: who's reachable and what our whispers did this session (bounces were invisible
     -- before 2026-11-10, when the channel still mixed factions)
     function C:NetReport()
         net:RequestRoster(true)
         C_Timer.After(3.5, function()
-            local why, others = Net.BlockReason(CHANNEL), net:Others()
+            local why, others, void = Net.BlockReason(net:Channel()), net:Others(), net:Void()
             if why then say("|cffff5555" .. why .. "|r")
             elseif not others then say("couldn't read the member list yet, try again in a few seconds.")
-            else say(("%d other Void player%s of your faction online."):format(others, others == 1 and "" or "s")) end
+            else say(("%d other Void player%s of your faction online, %d running the layer engine."):format(void or 0, (void or 0) == 1 and "" or "s", others)) end
+            local li = net:LegacyInfo()
+            if li then
+                say(li.kept and ("old layer channel kept for older versions (%s on it now; dropped %d days after the last one)."):format(
+                        li.old and tostring(li.old) .. " old" or "count not read yet", li.daysLeft)
+                    or "old layer channel no longer needed: nobody on an old version for 30 days.")
+            end
             say(("this session: %d whisper%s sent, %d bounced (not reachable), %d refused as offline, %d refused otherwise.")
                 :format(traffic.sent, traffic.sent == 1 and "" or "s", net.bounces, traffic.offline, traffic.refused))
         end)
@@ -448,8 +482,15 @@ function ns.LayerCoreBuild(owner)
         local raid = IsInRaid()
         local n = GetNumGroupMembers() or 0
         for i = 1, raid and n or n - 1 do
-            local un = UnitName((raid and "raid" or "party") .. i)
-            if type(un) == "string" and not secret(un) and Net.Canon(un) == name then return true end
+            local u = (raid and "raid" or "party") .. i
+            local un, sur = UnitName(u)
+            if type(un) == "string" and not secret(un) then
+                if Net.Canon(un) == name then return true end
+                -- Forever names have two parts ("Ana Brightwood"; Sol review 2026-11-16)
+                if type(sur) == "string" and not secret(sur) and sur ~= "" and Net.Canon(un .. " " .. sur) == name then return true end
+            end
+            local g = GetUnitName and GetUnitName(u, true)
+            if type(g) == "string" and not secret(g) and Net.Canon(g) == name then return true end
         end
         return false
     end
@@ -470,6 +511,12 @@ function ns.LayerCoreBuild(owner)
     function C:HostingOn() return S().hostHops ~= false end
     function C:SetHosting(on)
         S().hostHops = on and true or false
+        -- ONE switch for every Void addon (LayerHelp.lua, 2026-11-17): every addon's settings get the same
+        -- value, so it stays the same whichever addon runs the engine next time
+        for _, c in ipairs(reg.list) do
+            local ok, t = pcall(function() return c.settings and c.settings() end)
+            if ok and type(t) == "table" then t.hostHops = on and true or false end
+        end
         say(("helping others change layer %s."):format(on and "|cff33ff33on|r: Void players on your layer can ask you for a quick group invite (only while you're solo and out of combat; the group ends on its own)" or "|cffff5555off|r"))
         changed()
     end
@@ -547,6 +594,7 @@ function ns.LayerCoreBuild(owner)
             c.pair = state.pair
         end
         say(("you're on |cffffd200%s|r now."):format(C:Label(state.zone, state.pair)))
+        C.hlog("moved", state)
         if C:StayOn() and not state.test then   -- a test always leaves (Sol review)
             send(("HS:1:%s"):format(state.nonce), state.host, true)
             stop("staying in the group so you keep this layer (it lasts up to 15 minutes); leave it when you're done.")
@@ -571,6 +619,7 @@ function ns.LayerCoreBuild(owner)
                 moved()
             elseif state.phase == "left" and pair ~= state.pair then
                 S().hopStay = true
+                C.hlog("reverted", state)
                 stop("leaving the group sent you back, so from now on a hop keeps you in the group (Stay grouped, in the window).")
             end
         end
@@ -589,6 +638,7 @@ function ns.LayerCoreBuild(owner)
             leaveHopGroup(host)
         elseif cur then
             say(("joined, but you're still on %s. Trying another player."):format(C:Label(state.zone, cur)))
+            C.hlog("joinedNoMove", state)
             state.phase = "retrying"
             leaveHopGroup(state.host)
             C_Timer.After(2, function() if state and state.phase == "retrying" then nextHost() end end)
@@ -598,6 +648,7 @@ function ns.LayerCoreBuild(owner)
             setTimer(MOVE_WAIT, checkMove)
         else
             local host = state.host
+            C.hlog("unconfirmed", state)
             stop("couldn't confirm the move (no NPC seen), so you're leaving the group.")
             leaveHopGroup(host)
         end
@@ -620,6 +671,8 @@ function ns.LayerCoreBuild(owner)
                         or "didn't answer (offline or out of reach)")
                 end
             end
+            C.hlog("nobody", state, n > 0 and ("busy %d layer %d off %d none %d"):format(state.why.busy or 0, state.why.layer or 0,
+                state.why.off or 0, state.why.none or 0) or nil)
             stop(n > 0 and ("nobody on that layer could bring you over right now. Asked %d: %s. Try again in a bit."):format(n, table.concat(parts, ", "))
                 or "nobody on that layer could bring you over right now. Try again in a bit.")
             return
@@ -685,6 +738,7 @@ function ns.LayerCoreBuild(owner)
                 end)
                 return
             end
+            C.hlog(rank and "noFresh" or "noHelper", { zone = zone })
             if rank then
                 say("no Void player who can bring you over is on another layer here, apart from ones where you cleared this spot yourself in the last 10 minutes. Try again in a few minutes.")
                 changed()
@@ -707,7 +761,8 @@ function ns.LayerCoreBuild(owner)
             changed()
             return
         end
-        state = { zone = zone, from = cur, hosts = hosts, idx = 0 }
+        state = { zone = zone, from = cur, hosts = hosts, idx = 0, t0 = now() }
+        C.hlog("start", { zone = zone })   -- one per hop, however many helpers it asks (Sol review)
         say(("asking a Void player on %s to bring you over..."):format(pair and self:Label(zone, pair) or "another layer"))
         nextHost()
     end
@@ -716,8 +771,13 @@ function ns.LayerCoreBuild(owner)
     local function endHosting(leave)
         if not hosting then return end
         local guest = hosting.guest
-        if not hosting.joined then lateGuest = { name = guest, nonce = hosting.nonce, t = now() } end
+        C.hlog(hosting.joined and (hosting.finder and "hostFinderCame" or "hostCame")
+            or (hosting.finder and "hostFinderNoShow" or "hostNoShow"))
+        -- a guest who accepted late was counted as a no-show first: take that back (Sol review)
+        if hosting.joined and hosting.late then C.hunlog(hosting.finder and "hostFinderNoShow" or "hostNoShow") end
+        if not hosting.joined then lateGuest ={ name = guest, nonce = hosting.nonce, finder = hosting.finder, t = now() } end
         hosting = nil
+        StaticPopup_Hide("VOIDLAYER_REMOVE")   -- the guest is gone: no stale Remove prompt (Sol review)
         if leave and leaveHopGroup(guest) then say("left the layer-hop group.") end
     end
 
@@ -849,7 +909,8 @@ function ns.LayerCoreBuild(owner)
             say(("inviting %s to bring them to your layer (a layer hop; the group ends on its own)."):format(who))
         elseif tag == "HS" then
             local nonce = msg:match("^HS:1:(%d+)$")
-            if hosting and hosting.guest == who and nonce == hosting.nonce and inGroupWith(who) then
+            -- a nonce is required, and a Group Finder guest never extends its stay (Sol review 2026-11-16)
+            if nonce and hosting and not hosting.finder and hosting.guest == who and nonce == hosting.nonce and inGroupWith(who) then
                 hosting.deadline = hosting.invited + STAY_MAX
                 say(("%s stays in the group to keep your layer (up to 15 minutes); leave any time."):format(who))
             end
@@ -859,6 +920,7 @@ function ns.LayerCoreBuild(owner)
             if answer ~= "ok" then
                 local k = answer:match("^no:(%a+)$")
                 k = (k == "busy" or k == "layer" or k == "off") and k or "busy"
+                if k == "off" then C.offNames[who] = GetTime() end   -- not counted as a Layer helper for an hour
                 state.why = state.why or {}
                 state.why[k] = (state.why[k] or 0) + 1
                 -- moved off that layer: what they told us before is stale, so they stop being offered
@@ -875,6 +937,18 @@ function ns.LayerCoreBuild(owner)
     -- "Hop there?" for a rare on another layer of your zone; a line in chat for one on yours
     -- (only when VoidLayer itself runs the core: VoidSweep shows its own rare alerts).
     ------------------------------------------------------------------
+    -- section 7: a Group Finder guest still in your group; removing needs your click (UninviteUnit is restricted)
+    StaticPopupDialogs.VOIDLAYER_REMOVE = {
+        text = "VoidLayer: %s is still in your group (on your layer by now). Remove them? Your Group Finder listing stays.",
+        button1 = "Remove", button2 = "Not now",
+        OnAccept = function(_, name)
+            -- still this hosting session and still in our group, or a stale prompt could remove them later (Sol review)
+            if type(name) ~= "string" or not (hosting and hosting.finder and hosting.guest == name and inGroupWith(name)) then return end
+            if C_PartyInfo and C_PartyInfo.UninviteUnit then pcall(C_PartyInfo.UninviteUnit, name)
+            elseif UninviteUnit then pcall(UninviteUnit, name) end
+        end,
+        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+    }
     StaticPopupDialogs.VOIDLAYER_HOP = {
         text = "%s",
         button1 = "Hop there", button2 = CANCEL,
@@ -1758,12 +1832,152 @@ function ns.LayerCoreBuild(owner)
             local d = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
             if d then d.inviteAccepted = 1 end
             StaticPopup_Hide("PARTY_INVITE")
+            C.hideLfgPopup()
         end)
         say("back in the group, on the leader's layer.")
         changed()
         return true
     end
     C_Timer.NewTicker(30, function() pcall(askLeader, false) end)
+
+    ------------------------------------------------------------------
+    -- 7. Hosting from a Group Finder listing (core 8, 2026-11-16; the user: "do both").
+    -- Forever's Group Finder is the vanilla one (game type camelot): no auto-accept, no "apply", and the
+    -- listing note is a secure edit box an addon can't fill. Measured 11-16: 210 listings, none
+    -- auto-accept. So the PLAYER posts a listing (Custom, a note with "layer" in it); while it's up and
+    -- "Host from my Group Finder listing" is on, VoidLayer brings anyone (no addon needed on their side)
+    -- who whispers a swap word, or who clicks Group Invite on the listing. That invite is declined and
+    -- sent back the other way: joining THEIR group would move US to THEIR layer.
+    ------------------------------------------------------------------
+    -- one table field, not locals: LayerCoreBuild is at Lua 5.1's 200-locals limit
+    -- Live 11-16: when the HOST leaves the 2-person group, the listing goes with the group to the guest
+    -- (a guest inherited "Layer swap - whisper inv"). So for these guests the host never leaves: the
+    -- guest is told to leave, and after STAY the host gets a one-click Remove (UninviteUnit needs a click).
+    C.fh = { STAY = 60,      -- after this long in the group, offer the host a Remove button
+                GAP = 300,     -- one invite per player per this
+                BUSY = 60,     -- one "busy" whisper per player per this
+                sent = {}, busy = {}, wasListed = false,
+                WORDS = { "inv", "invite", "layer", "swap", "hop" } }
+    function C.fh.whisper(to, text)
+        if SendChatMessage then pcall(SendChatMessage, text, "WHISPER", nil, to) end
+    end
+    -- listed?, and the note when the game lets us read it
+    function C.fh.note()
+        if not (C_LFGList and C_LFGList.HasActiveEntryInfo and C_LFGList.GetActiveEntryInfo) then return false end
+        local ok, has = pcall(C_LFGList.HasActiveEntryInfo)
+        if not ok or secret(has) or has ~= true then return false end
+        local ok2, e = pcall(C_LFGList.GetActiveEntryInfo)
+        local c = ok2 and type(e) == "table" and e.comment or nil
+        if type(c) ~= "string" or secret(c) then return true, nil end
+        -- measured live 11-16: your own listing's note comes back as a protected token ("|Ku1|k") that only
+        -- displays as the text; it can't be read, so it can't be checked: the switch is the gate
+        if c:find("^|K.-|k$") then return true, nil end
+        return true, c
+    end
+    function C:FinderOn() return S().finderHost == true end
+    function C:SetFinder(on)
+        S().finderHost = on and true or false
+        if on then
+            S().hostHops = true   -- it hosts through the same guards
+            say("hosting from your Group Finder listing |cff33ff33on|r. Post one: Group Finder, Custom, a note with the word \"layer\" (e.g. |cffffd200Layer swap - whisper inv|r), Post. Anyone who whispers you inv, layer or swap, or clicks Group Invite on it, gets an invite onto your layer; they don't need an addon. Same limits as helping: solo, no fight, one every 2 minutes.")
+        else
+            say("hosting from your Group Finder listing |cffff5555off|r (you can remove the listing in the Group Finder).")
+        end
+        changed()
+    end
+    -- switched on, listed, and (when the note can be read) a note about layers: a listing for
+    -- "Stromgarde quests" with the switch left on never hands out swaps
+    function C:FinderListed()
+        if not self:FinderOn() then return false end
+        local listed, note = C.fh.note()
+        if not listed then return false end
+        if note and not note:lower():find("layer", 1, true) then return false end
+        return true
+    end
+    function C.fh.wants(text)
+        if type(text) ~= "string" or secret(text) or #text > 200 then return false end
+        -- another host's automatic reply ("VoidLayer: inviting you onto my layer...") is no request (Sol review)
+        if text:find("^%s*VoidLayer:") then return false end
+        local t = " " .. (text:lower():gsub("[^%a]", " ")) .. " "
+        for _, w in ipairs(C.fh.WORDS) do if t:find(" " .. w .. " ", 1, true) then return true end end
+        return false
+    end
+    -- a friend's or guildmate's invite is theirs to take, never turned around
+    function C.fh.knows(name)
+        local short = name:match("^([^%-]+)") or name
+        if C_FriendList and C_FriendList.GetFriendInfo then
+            local ok, info = pcall(C_FriendList.GetFriendInfo, short)
+            if ok and type(info) == "table" then return true end
+        end
+        if C_GuildInfo and C_GuildInfo.MemberExistsByName then
+            local ok, yes = pcall(C_GuildInfo.MemberExistsByName, short)
+            if ok and yes == true then return true end
+        end
+        return false
+    end
+    function C.fh.bring(who, how)
+        if C.fh.sent[who] and now() - C.fh.sent[who] < C.fh.GAP then return end
+        if not C:CanHost() then
+            if not (C.fh.busy[who] and now() - C.fh.busy[who] < C.fh.BUSY) then
+                C.fh.busy[who] = now()
+                C.fh.whisper(who, "VoidLayer: busy right now (one layer swap every 2 minutes, never in a fight or a group). Whisper again in a minute.")
+            end
+            return
+        end
+        local cur, zone = Layer:Here()
+        C.fh.sent[who] = now()
+        lastHosted = now()
+        hostedTimes[#hostedTimes + 1] = lastHosted
+        hosting = { guest = who, finder = true, invited = now(), deadline = now() + HOST_STAY }
+        C_PartyInfo.InviteUnit(who)
+        -- a group only moves you to the leader's layer inside the same zone (measured 11-09), so say where
+        local mi = zone and C_Map.GetMapInfo(zone)
+        local zn = mi and type(mi.name) == "string" and mi.name or nil
+        C.fh.whisper(who, ("VoidLayer: inviting you onto my layer%s.%s Accept; the game moves you in a few seconds, and the layer stays after the group ends.")
+            :format(cur and zone and (" (" .. C:Label(zone, cur) .. (zn and (" in " .. zn) or "") .. ")") or "",
+                    zn and (" It only works if you're in " .. zn .. " too.") or ""))
+        say(("%s %s from your Group Finder listing: inviting them onto your layer (the group ends on its own)."):format(who, how))
+        changed()
+    end
+    function C.fh.listingChanged()
+        local listed = C:FinderOn() and (C.fh.note())
+        if C.fh.wasListed and not listed and C:FinderOn() then
+            say("your Group Finder listing is gone: post it again to keep hosting from it.")
+        end
+        C.fh.wasListed = listed and true or false
+        changed()
+    end
+
+    -- Guest side (2026-11-16, the user: "death bobb has the addon and he still got the popup"): you whispered
+    -- someone a swap word (inv / layer / swap ...), and THAT player invites you within a minute -> accept it and
+    -- close the role window, like a Hop does. Any host: a Group Finder listing, a Layer-Swap host, a guildie.
+    -- Names are compared without realm and case (whisper and invite names can be written differently).
+    C.fh.ASK_FOR = 60
+    C.fh.asked = {}
+    function C.fh.key(n)
+        if type(n) ~= "string" or secret(n) then return nil end
+        return (n:gsub("%-.*$", "")):lower()
+    end
+    function C.fh.noteAsk(text, to)
+        local k = C.fh.key(to)
+        if k and C.fh.wants(text) then C.fh.asked[k] = now() end
+    end
+    function C.fh.takeAsked(from)
+        local k = C.fh.key(from)
+        local t = k and C.fh.asked[k]
+        if not (t and now() - t <= C.fh.ASK_FOR) then return false end
+        if IsInGroup() or InCombatLockdown() or IsInInstance() then return false end
+        C.fh.asked[k] = nil
+        AcceptGroup()
+        C_Timer.After(0, function()
+            local d = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
+            if d then d.inviteAccepted = 1 end
+            StaticPopup_Hide("PARTY_INVITE")
+            C.hideLfgPopup()
+        end)
+        say(("accepted %s's invite (you asked them for a layer swap). Leave the group once you've moved; the layer stays."):format(from))
+        return true
+    end
 
     ------------------------------------------------------------------
     -- Events
@@ -1774,18 +1988,30 @@ function ns.LayerCoreBuild(owner)
                           "NAME_PLATE_UNIT_ADDED", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "ZONE_CHANGED_NEW_AREA", "PARTY_LEADER_CHANGED" }) do
         pcall(f.RegisterEvent, f, ev)
     end
+    -- section 7 (on their own: a longer list above overflows this function's registers in Lua 5.1)
+    pcall(f.RegisterEvent, f, "CHAT_MSG_WHISPER")
+    pcall(f.RegisterEvent, f, "LFG_LIST_ACTIVE_ENTRY_UPDATE")
+    pcall(f.RegisterEvent, f, "CHAT_MSG_WHISPER_INFORM")   -- a whisper you sent: remember swap asks
     f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
         if event == "CHAT_MSG_ADDON" then
             if a1 ~= PREFIX or a3 ~= "WHISPER" or type(a2) ~= "string" or secret(a2) or #a2 > 255 then return end
             local who = Net.Canon(a4)
             if not who or secret(who) or who == me or not rateOK(who) then return end
+            if net:Heard(who) == false then return end   -- a hostile player (VoidNet): dropped; else they run the layer engine
             pcall(onMessage, a2, who)
         elseif event == "NAME_PLATE_UNIT_ADDED" then pcall(seeUnit, a1)
         elseif event == "PLAYER_TARGET_CHANGED" then pcall(seeUnit, "target")
         elseif event == "UPDATE_MOUSEOVER_UNIT" then pcall(seeUnit, "mouseover")
         elseif event == "ZONE_CHANGED_NEW_AREA" then changed()
+        elseif event == "CHAT_MSG_WHISPER" then
+            -- section 7: a swap word whispered while our layer listing is up
+            if type(a2) ~= "string" or secret(a2) or not C.fh.wants(a1) or not C:FinderListed() then return end
+            local who = Net.Canon(a2)
+            if who and not secret(who) and who ~= me and rateOK(who) then pcall(C.fh.bring, who, "whispered you") end
+        elseif event == "LFG_LIST_ACTIVE_ENTRY_UPDATE" then pcall(C.fh.listingChanged)
+        elseif event == "CHAT_MSG_WHISPER_INFORM" then pcall(C.fh.noteAsk, a1, a2)
         elseif event == "PLAYER_REGEN_DISABLED" then
-            if state and state.phase == "asking" then stop("hop cancelled: you're in combat.") end
+            if state and state.phase == "asking" then C.hlog("cancelled", state, "combat"); stop("hop cancelled: you're in combat.") end
         elseif event == "GROUP_ROSTER_UPDATE" then
             -- section 6: re-invite a member who asked and left; ask a (new) leader its layer
             pcall(reinviteGone)
@@ -1799,19 +2025,30 @@ function ns.LayerCoreBuild(owner)
             end
             if state and state.phase == "joined" then
                 if inGroupWith(state.host) then state.seenHost = true
-                elseif state.seenHost then stop("the group ended before the move was confirmed.") end
+                elseif state.seenHost then C.hlog("groupEnded", state); stop("the group ended before the move was confirmed.") end
             end
             if hosting then
                 if inGroupWith(hosting.guest) then
                     -- test host: the minute counts from the join (Sol review)
                     if not hosting.joined and hosting.testStay then hosting.deadline = now() + hosting.testStay end
+                    -- a Group Finder guest: tell them they can leave; after STAY offer the host a Remove click
+                    if not hosting.joined and hosting.finder then
+                        hosting.deadline = now() + C.fh.STAY
+                        local g = hosting.guest
+                        C_Timer.After(8, function()
+                            if hosting and hosting.guest == g and inGroupWith(g) then
+                                C.fh.whisper(g, "VoidLayer: you're on my layer now. Leave the group whenever you like (type /leave); the layer stays.")
+                            end
+                        end)
+                    end
                     hosting.joined = true
                 elseif hosting.joined then endHosting(false) end
             elseif lateGuest and now() - lateGuest.t < LATE_JOIN and inGroupWith(lateGuest.name)
                     and (GetNumGroupMembers() or 0) <= 2 then
                 -- they accepted after we stopped waiting: look after the group anyway (Sol review)
                 hosting = { guest = lateGuest.name, nonce = lateGuest.nonce, invited = now(), joined = true,
-                            deadline = now() + HOST_STAY }
+                            finder = lateGuest.finder, late = true,
+                            deadline = now() + (lateGuest.finder and C.fh.STAY or HOST_STAY) }
                 lateGuest = nil
             end
             changed()
@@ -1824,13 +2061,34 @@ function ns.LayerCoreBuild(owner)
         elseif event == "PARTY_INVITE_REQUEST" then
             -- the leader's invite back after a rejoin (section 6)
             if rejoinInvite(a1) then return end
+            -- the player you just whispered for a swap (guest side of section 7): accept, no role window
+            if not (state and state.phase == "asking") then
+                local ok, took = pcall(C.fh.takeAsked, a1)
+                if ok and took then return end
+            end
             -- accept only the invite from the player we asked, while asking
-            if not (state and state.phase == "asking") then return end
+            if not (state and state.phase == "asking") then
+                -- section 7: a stranger clicked Group Invite on our layer listing. Joining their group would
+                -- move us to their layer, so decline and invite them the other way.
+                if type(a1) ~= "string" or secret(a1) or IsInGroup() or hosting or not C:FinderListed() then return end
+                local who = Net.Canon(a1)
+                if not who or secret(who) or who == me or C.fh.knows(who) then return end
+                -- only turn it around when we really can invite back; otherwise the invite stays theirs (Sol review)
+                if not C:CanHost() or (C.fh.sent[who] and now() - C.fh.sent[who] < C.fh.GAP) then return end
+                if DeclineGroup then DeclineGroup() end
+                StaticPopup_Hide("PARTY_INVITE")
+                C.hideLfgPopup()
+                C_Timer.After(1, function()
+                    -- still listed and free a second later (Sol review)
+                    if C:FinderListed() and not IsInGroup() then pcall(C.fh.bring, who, "sent you a group invite") end
+                end)
+                return
+            end
             if type(a1) ~= "string" or secret(a1) or Net.Canon(a1) ~= state.host then return end
             -- still the hop you asked for: same zone, solo, no combat, no instance (Sol review)
             local _, zone = Layer:Here()
             if zone ~= state.zone or IsInGroup() or InCombatLockdown() or IsInInstance() then
-                stop("hop cancelled: you've moved on since asking.")
+                C.hlog("cancelled", state, "moved on"); stop("hop cancelled: you've moved on since asking.")
                 return
             end
             AcceptGroup()
@@ -1839,6 +2097,7 @@ function ns.LayerCoreBuild(owner)
                 local d = StaticPopup_FindVisible and StaticPopup_FindVisible("PARTY_INVITE")
                 if d then d.inviteAccepted = 1 end
                 StaticPopup_Hide("PARTY_INVITE")
+                C.hideLfgPopup()
             end)
             state.phase = "joined"
             setTimer(MOVE_WAIT, checkMove)
@@ -1850,7 +2109,18 @@ function ns.LayerCoreBuild(owner)
         if hosting then
             local n = now()
             if not hosting.joined and n - hosting.invited > JOIN_WAIT then endHosting(false)
-            elseif hosting.joined and n >= hosting.deadline then endHosting(true) end
+            elseif hosting.joined and n >= hosting.deadline then
+                -- a Group Finder guest: never leave (the listing would go to them); ask once for a Remove click
+                if hosting.finder then
+                    if not hosting.askedRemove and inGroupWith(hosting.guest) then
+                        -- only counts as asked when the game really showed it (it can return nil; Sol review)
+                        hosting.askedRemove = StaticPopup_Show("VOIDLAYER_REMOVE", hosting.guest, nil, hosting.guest) ~= nil
+                    end
+                    hosting.deadline = n + (hosting.askedRemove and 600 or 10)   -- shown: no more asks; not shown: try again soon
+                else
+                    endHosting(true)
+                end
+            end
         end
         -- forget old question ids, old rares and old offers (Sol review: unbounded otherwise)
         for k, t in pairs(seenQ) do if now() - t > 300 then seenQ[k] = nil end end
@@ -1859,6 +2129,9 @@ function ns.LayerCoreBuild(owner)
         for k, s in pairs(sentRare) do if now() - s.t > RARE_RESEND then sentRare[k] = nil end end
         for k, b in pairs(bucket) do if now() - b.start > 60 then bucket[k] = nil end end
         for k, t in pairs(linkSharedTo) do if now() - t > ASK_CD then linkSharedTo[k] = nil end end
+        for k, t in pairs(C.fh.sent) do if now() - t > C.fh.GAP then C.fh.sent[k] = nil end end
+        for k, t in pairs(C.fh.busy) do if now() - t > C.fh.BUSY then C.fh.busy[k] = nil end end
+        for k, t in pairs(C.fh.asked) do if now() - t > C.fh.ASK_FOR then C.fh.asked[k] = nil end end
     end)
 
     -- join a little after login (VoidSweep 14 s, VoidGather earlier), then read the members
@@ -1866,22 +2139,33 @@ function ns.LayerCoreBuild(owner)
         join()
         C_Timer.After(4, function() net:RequestRoster(true) end)
     end)
-    -- a new channel at 00:00 UTC
+    -- new channels at 00:00 UTC, and the old one left once nobody old has been on it for 30 days (VoidNet)
     C_Timer.NewTicker(60, function()
-        local name, pw = Net.DailyChannel(DAILY_TAG, DAILY_SALT)
-        if name == CHANNEL then return end
-        OLD[#OLD + 1] = CHANNEL
-        CHANNEL, PW = name, pw
-        net:SetChannel(name)
-        publish()   -- "—" until the new day's list is read
-        C_Timer.After(5 + math.random() * 5, function()
-            join()
-            C_Timer.After(4, function() net:RequestRoster(true) end)
-        end)
+        if net:Day() then publish() end   -- "—" until the new day's list is read
     end)
 
-    -- once per character: hosting is on, and how to turn it off
+    -- Players who newly help (no VoidLayer / VoidSweep, 2026-11-17): a short pop-up ONCE PER ACCOUNT (kept in
+    -- VoidNet's saved state, which every Void addon's account data holds), with a one-click way out.
     local s = S()
+    StaticPopupDialogs.VOIDNET_HELP = {
+        text = "Void addons: you can now help other players change layer.\n\nWhen a Void player on your layer asks, you send them a quick group invite (only when you're solo and out of combat). Don't want it? Turn off Help others change layer in %s.",
+        button1 = OKAY or "OK", button2 = "Turn it off",
+        OnCancel = function(_, _, reason) if reason == "clicked" then C:SetHosting(false) end end,
+        -- Escape only closes it (the game would call OnCancel = "Turn it off" on Escape otherwise)
+        OnEscape = function() end,
+        timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+    }
+    local vs = net and net.core and net.core.state
+    if owner.addon ~= "VoidLayer" and owner.addon ~= "VoidSweep" and vs and not vs.helpPopup and C:HostingOn() then
+        vs.helpPopup = true
+        s.hostNoticeShown = true
+        C_Timer.After(25, function()
+            local h = rawget(_G, "VoidLayerHelp")
+            local where = h and h.WHERE and h.WHERE[owner.addon] or ("the Void hub (Help Void layer hopping)")
+            StaticPopup_Show("VOIDNET_HELP", where)
+        end)
+    end
+    -- once per character (VoidLayer / VoidSweep players): hosting is on, and how to turn it off
     if s.hostHops == nil and not s.hostNoticeShown then
         s.hostNoticeShown = true
         C_Timer.After(25, function()

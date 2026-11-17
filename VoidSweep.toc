@@ -2,7 +2,7 @@
 ## Title: |cff00c7ffVoidSweep|r
 ## Notes: Live rare radar (WoW Forever and Midnight): rares that are up right now, shared between players, plus treasures and world bosses on Midnight. Click a pin for directions.
 ## Author: Vede
-## Version: 0.2.38
+## Version: 0.2.39
 ## SavedVariables: VoidSweepDB, VoidPresenceDB
 ## SavedVariablesPerCharacter: VoidSweepCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Map_01
@@ -16,11 +16,13 @@ Scanner.lua
 Poi.lua
 PresenceBox.lua
 WhisperNet.lua
+VoidNet.lua
 VoidSwarm.lua
 VoidSwarmLink.lua
 VoidSync.lua
 Layer.lua
 VoidLayerCore.lua
+LayerHelp.lua
 LayerLink.lua
 CampData.lua
 CampNames.lua

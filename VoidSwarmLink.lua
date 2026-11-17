@@ -48,10 +48,19 @@ function L.Host(db, Net)
     db = type(db) == "table" and db or {}
     db.swarmSalt = db.swarmSalt or tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
     local name, pw = Net.DailyChannel(TAG, SALT)
-    local link = Net.New(name, nil, {})
+    -- the one channel for every Void addon (VoidNet.lua, 2026-11-17): the swarm's daily "Vq" channel becomes
+    -- its old channel, kept 30 days after the last player on an older version
+    local link
+    if ns.VoidNet then
+        link = ns.VoidNet.New({ prefix = PREFIX, legacy = { tag = TAG, salt = SALT }, db = db })
+        name = link:Channel()
+    else
+        link = Net.New(name, nil, {})
+    end
     L.link, L.channel = link, name
 
     local function join()
+        if link.Join then link:Join() return end
         if (GetChannelName(L.channel) or 0) > 0 or chatLocked() then return end
         JoinTemporaryChannel(L.channel, pw)
         if ChatFrame_RemoveChannel then
@@ -91,11 +100,16 @@ function L.Host(db, Net)
         if prefix ~= PREFIX or type(msg) ~= "string" or msg:byte(1) ~= 90 then return end   -- "Z": swarm only
         if issecretvalue and (issecretvalue(msg) or issecretvalue(sender)) then return end
         local who = Net.Canon(sender)
+        if who and link.Heard and link:Heard(who) == false then return end   -- hostile (VoidNet): dropped
         if who then pcall(net.OnMessage, net, msg, who) end
     end)
     C_Timer.NewTicker(1, function() if not chatLocked() then pcall(net.Tick, net) end end)
     -- the channel changes at 00:00 UTC: follow it (leave yesterday's)
     C_Timer.NewTicker(60, function()
+        if link.Day then   -- VoidNet follows the hour's channel and drops the old one when it's time
+            if link:Day() then L.channel = link:Channel() end
+            return
+        end
         local n2, p2 = Net.DailyChannel(TAG, SALT)
         if n2 == L.channel or chatLocked() then return end
         if (GetChannelName(L.channel) or 0) > 0 then LeaveChannelByName(L.channel) end
