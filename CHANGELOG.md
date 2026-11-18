@@ -1,5 +1,12 @@
 # VoidSweep Changelog
 
+## 0.2.42 — 2026-11-18
+
+- **Sleeping bag star after your group forms (WoW Forever).** The game takes raid markers off when a group forms, so your star was gone just when your guests could use it. The Bag button now turns into a gold **Star** button: one click puts the star back and says the bag line in /say again.
+- **One chat line per rare.** A rare in view said "is up" again every minute; now once while it stays up (again after 5 minutes, a kill, or news from another layer).
+- **Rare pins move to where players meet them (WoW Forever).** Where you stood when you first saw a rare whose spot Void players haven't confirmed yet is saved and shared; once two players agree, VoidDB ships that spot.
+- `/vsw net` also says what came in from other players and how many questions you answered.
+
 ## 0.2.41 — 2026-11-17
 
 - **WoW Forever: treasure chests and supplies on your map.** Forever has no chest markers, so VoidSweep never showed one. Now it sees a chest the way you do: hover it, walk up to it or open it. Battered and Solid Chests, footlockers, strongboxes and the rest get a yellow dot; supplies (Food Crates, barrels of milk and water, Weapon and Armor Crates) their own pink one and their own switch in the map menu.

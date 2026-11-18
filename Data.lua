@@ -127,32 +127,33 @@ end
 
 function L:GetSharedForMap(mapID) return SharedDB()[mapID] end
 
--- Returns true if anything changed.
+-- Returns true if anything changed, and what it brought: "new", "vote" (one more player backing
+-- it) or "had" (yours, shipped, settled, or the same player again).
 -- sender = who counts as one vote (a salted fingerprint once the swarm runs: the same player by the
 -- old messages and by the swarm counts once); label = the name the tooltip shows as the finder
 -- (an old-format report has one; the swarm doesn't: "another player")
 function L:AddShared(mapID, rec, sender, label)
     local key = keyFor(rec)
     local mine = DB()[mapID]
-    if mine and mine[key] then return false end                 -- you know it
+    if mine and mine[key] then return false, "had" end          -- you know it
     local seed = VS.Seed and VS.Seed[mapID]
-    if seed and seed[key] then return false end                 -- everyone has it
+    if seed and seed[key] and not seed[key].ext then return false, "had" end   -- everyone has it (ours)
     local db = SharedDB()
     db[mapID] = db[mapID] or {}
     local s = db[mapID][key]
     if s then
-        if s.c >= CONFIRMED or s.by[sender] then return false end
+        if s.c >= CONFIRMED or s.by[sender] then return false, "had" end
         s.by[sender] = true
         s.c = s.c + 1
         s.t = time()
-        return true
+        return true, "vote"
     end
     local n = 0
     for _ in pairs(db[mapID]) do n = n + 1 end
-    if n >= SHARED_CAP then return false end
+    if n >= SHARED_CAP then return false, "full" end   -- no room: we never knew it
     rec.c, rec.f, rec.by, rec.t = 1, label, { [sender] = true }, time()
     db[mapID][key] = rec
-    return true
+    return true, "new"
 end
 
 -- Record a sighting at map-relative (x, y) on mapID.
@@ -179,8 +180,11 @@ function L:Record(entry, mapID, x, y)
     -- seen it yourself now: the shared copy is redundant
     local shared = SharedDB()[mapID]
     if shared then shared[key] = nil end
-    -- a spot nobody ships in the starter map -> tell other players
-    if isNew and VS.Sync and not (VS.Seed and VS.Seed[mapID] and VS.Seed[mapID][key]) then
+    -- a spot nobody ships in the starter map -> tell other players. One the starter map has from the
+    -- credited databases (ext, tools/cmd/voidsweep-seed) goes out too: 2+ players make it our own data
+    -- (the user, 2026-11-18: "as soon as a player validates something we got somewhere else we now own that data")
+    local seeded = VS.Seed and VS.Seed[mapID] and VS.Seed[mapID][key]
+    if isNew and VS.Sync and not (seeded and not seeded.ext) then
         VS.Sync:ShareSpot(mapID, rec)
     end
 end

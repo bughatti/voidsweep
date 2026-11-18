@@ -524,11 +524,12 @@ local function answerWhisper(mapID, sender, replyTo)
     local key, t = sender .. ":" .. mapID, GetTime()
     if lastReply[key] and t - lastReply[key] < REPLY_CD then return end
     if lastReplyTo[sender] and t - lastReplyTo[sender] < REPLY_GAP then return end
-    if not next(VS.Learned:GetForMap(mapID) or {}) then return end
+    if not next(VS.Learned:GetForMap(mapID) or {}) then tally("unanswered", "Q"); return end
     -- and one answer to anyone every ANSWER_EVERY seconds, so answers can't fill the
     -- queue and crowd out live rare alerts
     if lastAnyReply and t - lastAnyReply < ANSWER_EVERY then return end
     lastReply[key], lastReplyTo[sender], lastAnyReply = t, t, t
+    tally("answered", "Q")
     C_Timer.After(1 + math.random() * 3, function()
         if enabled() then sendSpots("B", mapID, ownSpots(mapID, REPLY_MAX_W), { replyTo }) end
     end)
@@ -602,7 +603,7 @@ local function voter(sender)
     return h and ("#" .. h) or sender, h
 end
 Sync.HashVoters = hashVoters   -- (tools/cmd/vsweep-sync-test)
-local function takeSpots(mapID, body, sender)
+local function takeSpots(mapID, body, sender, tag)
     local changed, n = false, 0
     local who, h = voter(sender)
     for entry in body:gmatch("[^;]+") do
@@ -617,7 +618,9 @@ local function takeSpots(mapID, body, sender)
             local rec = { kind = kind, name = name, x = x / 10000, y = y / 10000,
                           vignetteID = (vid and vid > 0) and vid or nil,
                           questID = (qid and qid > 0) and qid or nil }
-            if VS.Learned:AddShared(mapID, rec, who, sender) then changed = true end
+            local ch, what = VS.Learned:AddShared(mapID, rec, who, sender)
+            if ch then changed = true end
+            tally("in_" .. (what or "had"), tag or "B")
             if swFeed and h then swFeed(mapID, rec, h) end
         end
     end
@@ -647,7 +650,7 @@ function Sync:OnSpotMessage(msg, sender, replyTo)
             replyTimer[mapID] = nil
             lastReply[mapID] = GetTime()
         end
-        takeSpots(mapID, body, sender)
+        takeSpots(mapID, body, sender, tag)
     end
     return true
 end
@@ -958,7 +961,11 @@ function Sync:SwarmBridge()
         onTake = function(piece, key, _, holder, orig)
             if feeding then return end
             local rec = swRec(key, orig)
-            if rec and VS.Learned:AddShared(tonumber(piece), rec, "#" .. holder) then scheduleRefresh() end
+            if rec then
+                local ch, what = VS.Learned:AddShared(tonumber(piece), rec, "#" .. holder)
+                if ch then scheduleRefresh() end
+                tally("in_" .. (what or "had"), "swarm")
+            end
         end }
     VoidSwarm.Want("w", spec)
     swFeed = function(mapID, rec, h)
@@ -980,7 +987,7 @@ function Sync:SwarmBridge()
         for mapID, recs in pairs(learned) do
             local seed = VS.Seed and VS.Seed[mapID]
             for key, rec in pairs(recs) do
-                if not (seed and seed[key]) then Sync.SwarmReport(mapID, rec) end
+                if not (seed and seed[key] and not seed[key].ext) then Sync.SwarmReport(mapID, rec) end   -- ext: still outside-sourced, confirm it
             end
         end
     end)
@@ -1135,6 +1142,8 @@ local function printTraffic()
     end
     print(("|cff00c7ffVoidSweep|r: traffic since %s -- sent: %s | received: %s | not sent, nobody online: %s | offline: %s | refused: %s | old format held back: %s"):format(
         date("%b %d %H:%M", s.since), list(s.sent), list(s.got), list(s.nobody), list(s.offline), list(s.refused), list(s.held)))
+    print(("|cff00c7ffVoidSweep|r: what came in -- new to us: %s | backing a spot not settled yet: %s | already had: %s | questions answered: %s | nothing to answer with: %s"):format(
+        list(s.in_new), list(s.in_vote), list(s.in_had), list(s.answered), list(s.unanswered)))
     if Sync.legacy then print("|cff00c7ffVoidSweep|r: " .. Sync.legacy:Line()) end
 end
 

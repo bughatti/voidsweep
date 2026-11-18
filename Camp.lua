@@ -492,15 +492,27 @@ if (select(4, GetBuildInfo()) or 0) < 100000 then
     star:SetAttribute("action2", "clear")       -- right click
     star:Hide()
     star:SetScript("PostClick", function(_, button, down)
-        if down or button ~= "LeftButton" then return end
-        C:AnnounceBag()
+        if down then return end
+        if button == "RightButton" then C.starWanted = false; C:StarBack(); return end   -- you took it off
+        if button ~= "LeftButton" then return end
+        C.starWanted = true
+        -- putting back a star the game took off also says the bag line again (the user, 2026-11-17:
+        -- "the bag button goes away and i cant click it to say"); quiet if it was just said
+        local back = C.starLost
+        if back then C:StarBack() end
+        C:AnnounceBag(back)
     end)
     star:SetScript("OnEnter", function(self)
         if box then box.bag:SetBackdropBorderColor(A[1], A[2], A[3], 1) end
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:AddLine("Offer your sleeping bag")
-        GameTooltip:AddLine("Says in /say: whisper you \"bag\" for a party invite. Whoever does gets invited and told where your bag is.", 0.8, 0.8, 0.8, true)
-        GameTooltip:AddLine("Puts a star on you so your group can find you. Right-click takes it off.", 0.8, 0.8, 0.8, true)
+        if C.starLost then
+            GameTooltip:AddLine("Put your star back")
+            GameTooltip:AddLine("Your group formed and the game took the star off. Click to put it back on you (your group can see it now) and say the bag line in /say again.", 0.8, 0.8, 0.8, true)
+        else
+            GameTooltip:AddLine("Offer your sleeping bag")
+            GameTooltip:AddLine("Says in /say: whisper you \"bag\" for a party invite. Whoever does gets invited and told where your bag is.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("Puts a star on you so your group can find you. Right-click takes it off.", 0.8, 0.8, 0.8, true)
+        end
         GameTooltip:Show()
     end)
     star:SetScript("OnLeave", function()
@@ -565,6 +577,55 @@ end
 local function bagOut()
     local b = VS.Bag and VS.Bag:Active()
     return b and VS:Config().bagInvite ~= false and b or nil
+end
+
+-- The star and your group (the user, 2026-11-17: "it put a star on me and then when someone joined the
+-- star went away, i had to manually put it back on"). Raid markers belong to a group: the one you set
+-- solo is yours only, and when the group forms the game resets the markers, so the star is gone just
+-- when your guests could see it. An addon can't set it (restricted, above), so the Bag button turns
+-- into a lit "Star" button and one line says why: one click puts it back (no second /say).
+local STAR = 1
+local function starOn()
+    local i = GetRaidTargetIndex and GetRaidTargetIndex("player")
+    if issecretvalue and issecretvalue(i) then return nil end
+    return i == STAR
+end
+local function anyMarker()
+    local i = GetRaidTargetIndex and GetRaidTargetIndex("player")
+    if issecretvalue and issecretvalue(i) then return true end   -- unknown: don't nag
+    return i ~= nil and i ~= 0
+end
+-- the Bag button's look: "Star" lit while the star needs putting back, else "Bag"
+function C:StarBack()
+    if starOn() or not C.starWanted or not bagOut() then C.starLost = nil end
+    local b = box and box.bag
+    if not b then return end
+    if C.starLost then
+        b.text:SetText("|cffffd200Star|r")
+        b:SetBackdropBorderColor(1, 0.82, 0, 1)
+    else
+        b.text:SetText("Bag")
+        b:SetBackdropBorderColor(A[1], A[2], A[3], 0.6)
+    end
+end
+local starWatch = forever() and CreateFrame("Frame")
+if starWatch then
+    starWatch:RegisterEvent("RAID_TARGET_UPDATE")
+    starWatch:RegisterEvent("GROUP_ROSTER_UPDATE")
+    starWatch:SetScript("OnEvent", function()
+        C_Timer.After(0.5, function()   -- the reset and the roster arrive close together
+            if not bagOut() then C.starWanted, C.starLost = nil, nil; C:StarBack(); return end
+            if starOn() then C.starWanted = true end   -- the star on you while the bag is out (also after a /reload)
+            if C.starWanted and IsInGroup() and not anyMarker() then
+                if not C.starLost then
+                    C.starLost = true
+                    print("|cff00c7ffVoidSweep|r: your star came off when your group formed (the game resets markers then). Click |cffffd200Star|r on the camp box to put it back (your group can see it now) and say the bag line again.")
+                    C:BagOut()   -- the box (and its button) back up, even if you closed it
+                end
+            end
+            C:StarBack()
+        end)
+    end)
 end
 
 function C:Refresh()
@@ -807,13 +868,13 @@ function C:Sit()
 end
 
 -- The Bag button: one /say line asking for "bag" whispers. Once per 30 s so a double click
--- doesn't spam /say.
+-- doesn't spam /say. quiet: no "you just said it" line (the Star click, whose star is the point).
 local lastSay = 0
-function C:AnnounceBag()
+function C:AnnounceBag(quiet)
     local b = bagOut()
     if not b then return end
     if GetTime() - lastSay < 30 then
-        print("|cff00c7ffVoidSweep|r: you just said it; wait a few seconds before saying it again.")
+        if not quiet then print("|cff00c7ffVoidSweep|r: you just said it; wait a few seconds before saying it again.") end
         return
     end
     local msg = "My sleeping bag is out" .. (b.where ~= "" and (" at " .. b.where) or "")

@@ -301,6 +301,16 @@ local function check(unit)
     -- within CORPSE): it keeps its first kill time. Re-stamping it "now" would move the kill later
     -- for everyone and make respawns look shorter (Codex release review)
     if dead and cur and cur.dead and cur.age < CORPSE and layerNum(cur.layer) == layerNum(layer) then return end
+    -- A rare the starter map still has from the credited databases (ext): where you stand when you see it is
+    -- a measured spot. It becomes your own record (and goes out like any new spot), so 2+ players make it our
+    -- own data at the next release (the user, 2026-11-18). Only on the rare's own map (no child-map math).
+    local seeded = VS.Seed and VS.Seed[e.mapID] and VS.Seed[e.mapID][e.key]
+    if seeded and seeded.ext and mapID == e.mapID and VS.Learned and VS.Learned.Record then
+        local mine = VS.Learned:GetForMap(mapID)
+        if not (mine and mine[e.key]) then
+            pcall(VS.Learned.Record, VS.Learned, { name = name, kind = "rare" }, mapID, x, y)
+        end
+    end
     swOwn(e, dead, layer)   -- before store: a respawn sample needs the kill it follows
     store(e, dead, nil, layer)
     share(e, name, dead, layer)
@@ -335,7 +345,16 @@ function S:OnShared(body, sender, version)
     if cur and S:LayerMatch(mapID, cur.layer) == "same" and S:LayerMatch(mapID, layer) == "other" then return end
     store({ mapID = mapID, key = key }, dead, sender or "another player", layer)
     if dead then swFeedKill(mapID, key, layer, sender) end
+    -- one chat line per rare while it stays up (the user, 2026-11-17: "Rot Hide Bruiser is up" came 3 times:
+    -- the finder re-reports it every minute it's in view). The pin still refreshes on every report; the line
+    -- comes again only after UP_TTL, a kill, or news from another layer.
+    S.said = S.said or {}
+    local sk = mapID .. ":" .. key
+    if dead then S.said[sk] = nil end
+    local said = S.said[sk]
+    if not dead and said and GetTime() - said.t < UP_TTL and said.layer == layer then return end
     if not dead then
+        S.said[sk] = { t = GetTime(), layer = layer }
         local zone = C_Map.GetMapInfo(mapID)
         local lt = S:LayerText(mapID, layer)
         DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is up|r (seen by %s%s)%s."):format(
