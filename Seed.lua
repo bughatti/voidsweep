@@ -14,16 +14,16 @@ local forever = (select(4, GetBuildInfo()) or 0) < 100000
 
 if forever then
 -- Rares (and their spawn points) VoidSweep can't see on WoW Forever come from VoidDB
--- (credits: NOTICE.txt) @ 469831f4eefa1a6fb00e0c953af765edd0e8a685.
+-- (credits: NOTICE.txt) @ cae6d644952b9b12fbd1e3a500211893336cc219.
 -- forever
 VS.Seed = {
     [1411] = {
         ["nCaptain Flat Tusk"] = { name="Captain Flat Tusk", kind="rare", x=0.4493, y=0.5053, ext=true },
         ["nDeath Flayer"] = { name="Death Flayer", kind="rare", x=0.3653, y=0.4967, ext=true },
-        ["nDustwind Eggtender"] = { name="Dustwind Eggtender", kind="rare", x=0.5219, y=0.2176, ext=true },
+        ["nDustwind Eggtender"] = { name="Dustwind Eggtender", kind="rare", x=0.5255, y=0.2130, ext=true },
         ["nFelweaver Scornn"] = { name="Felweaver Scornn", kind="rare", x=0.5278, y=0.0896, ext=true },
         ["nGeolord Mottle"] = { name="Geolord Mottle", kind="rare", x=0.4381, y=0.5046, ext=true },
-        ["nShal'ma"] = { name="Shal'ma", kind="rare", x=0.6064, y=0.8966, ext=true },
+        ["nShal'ma"] = { name="Shal'ma", kind="rare", x=0.6046, y=0.8778, ext=true },
         ["nWarlord Kolkanis"] = { name="Warlord Kolkanis", kind="rare", x=0.4788, y=0.7737, ext=true },
     },
     [1412] = {
@@ -32,10 +32,10 @@ VS.Seed = {
         ["nMazzranache"] = { name="Mazzranache", kind="rare", x=0.4907, y=0.4871, ext=true },
         ["nSister Hatelash"] = { name="Sister Hatelash", kind="rare", x=0.3724, y=0.2260, ext=true },
         ["nSnagglespear"] = { name="Snagglespear", kind="rare", x=0.5170, y=0.7428, ext=true },
-        ["nSnarlsnout"] = { name="Snarlsnout", kind="rare", x=0.3273, y=0.6462, ext=true },
-        ["nStormherald Ukta"] = { name="Stormherald Ukta", kind="rare", x=0.6013, y=0.5833, ext=true },
+        ["nSnarlsnout"] = { name="Snarlsnout", kind="rare", x=0.3332, y=0.6359, ext=true },
+        ["nStormherald Ukta"] = { name="Stormherald Ukta", kind="rare", x=0.6011, y=0.5831, ext=true },
         ["nThe Rake"] = { name="The Rake", kind="rare", x=0.5157, y=0.2738, ext=true },
-        ["nThornstarter Igleg"] = { name="Thornstarter Igleg", kind="rare", x=0.5901, y=0.3179, ext=true },
+        ["nThornstarter Igleg"] = { name="Thornstarter Igleg", kind="rare", x=0.5921, y=0.3125, ext=true },
     },
     [1413] = {
         ["nAmbassador Bloodrage"] = { name="Ambassador Bloodrage", kind="rare", x=0.4774, y=0.9074, ext=true },
@@ -80,6 +80,7 @@ VS.Seed = {
         ["nGeomancer Flintdagger"] = { name="Geomancer Flintdagger", kind="rare", x=0.8280, y=0.3223, ext=true },
         ["nKovork"] = { name="Kovork", kind="rare", x=0.3300, y=0.4404, ext=true },
         ["nMolok the Crusher"] = { name="Molok the Crusher", kind="rare", x=0.5462, y=0.7971, ext=true },
+        ["nNeedletooth"] = { name="Needletooth", kind="rare", x=0.6813, y=0.6635, ext=true },
         ["nNimar the Slayer"] = { name="Nimar the Slayer", kind="rare", x=0.6386, y=0.6858, ext=true },
         ["nPrince Nazjak"] = { name="Prince Nazjak", kind="rare", x=0.2160, y=0.8600, ext=true },
         ["nRuul Onestone"] = { name="Ruul Onestone", kind="rare", x=0.1807, y=0.6878, ext=true },
@@ -109,8 +110,9 @@ VS.Seed = {
     },
     [1420] = {
         ["nBayne"] = { name="Bayne", kind="rare", x=0.3990, y=0.4216, ext=true },
-        ["nBlightsculler"] = { name="Blightsculler", kind="rare", x=0.1753, y=0.5363, ext=true },
-        ["nDecrepit Harvester"] = { name="Decrepit Harvester", kind="rare", x=0.5352, y=0.5734, ext=true },
+        ["nBlightsculler"] = { name="Blightsculler", kind="rare", x=0.1769, y=0.5405, ext=true },
+        ["nColdrasp"] = { name="Coldrasp", kind="rare", x=0.1830, y=0.6691, ext=true },
+        ["nDecrepit Harvester"] = { name="Decrepit Harvester", kind="rare", x=0.5350, y=0.5768, ext=true },
         ["nDeeb"] = { name="Deeb", kind="rare", x=0.6329, y=0.2748, ext=true },
         ["nFarmer Solliden"] = { name="Farmer Solliden", kind="rare", x=0.3709, y=0.4946, ext=true },
         ["nFellicent's Shade"] = { name="Fellicent's Shade", kind="rare", x=0.7696, y=0.6035, ext=true },
@@ -118,7 +120,7 @@ VS.Seed = {
         ["nMuad"] = { name="Muad", kind="rare", x=0.3649, y=0.4239, ext=true },
         ["nRessan the Needler"] = { name="Ressan the Needler", kind="rare", x=0.4286, y=0.6757, ext=true },
         ["nSri'skulk"] = { name="Sri'skulk", kind="rare", x=0.8816, y=0.5144, ext=true },
-        ["nThe Condemned One"] = { name="The Condemned One", kind="rare", x=0.6728, y=0.4530, ext=true },
+        ["nThe Condemned One"] = { name="The Condemned One", kind="rare", x=0.6894, y=0.4429, ext=true },
         ["nTormented Spirit"] = { name="Tormented Spirit", kind="rare", x=0.4559, y=0.3162, ext=true },
     },
     [1421] = {
@@ -172,7 +174,7 @@ VS.Seed = {
     [1426] = {
         ["nBjarn"] = { name="Bjarn", kind="rare", x=0.5945, y=0.5843, ext=true },
         ["nEdan the Howler"] = { name="Edan the Howler", kind="rare", x=0.4221, y=0.4943, ext=true },
-        ["nGhostfang"] = { name="Ghostfang", kind="rare", x=0.8142, y=0.5320, ext=true },
+        ["nGhostfang"] = { name="Ghostfang", kind="rare", x=0.7952, y=0.4857, ext=true },
         ["nGibblewilt"] = { name="Gibblewilt", kind="rare", x=0.2737, y=0.3621, ext=true },
         ["nGreat Father Arctikus"] = { name="Great Father Arctikus", kind="rare", x=0.2278, y=0.5208, ext=true },
         ["nHammerspine"] = { name="Hammerspine", kind="rare", x=0.7145, y=0.5129, ext=true },
@@ -200,10 +202,10 @@ VS.Seed = {
         ["nVolchan"] = { name="Volchan", kind="rare", x=0.7430, y=0.3782, ext=true },
     },
     [1429] = {
-        ["nElder Finseer"] = { name="Elder Finseer", kind="rare", x=0.7888, y=0.5798, ext=true },
+        ["nElder Finseer"] = { name="Elder Finseer", kind="rare", x=0.7945, y=0.5369, ext=true },
         ["nFedfennel"] = { name="Fedfennel", kind="rare", x=0.6648, y=0.4089, ext=true },
         ["nGruff Swiftbite"] = { name="Gruff Swiftbite", kind="rare", x=0.2793, y=0.8821, ext=true },
-        ["nMatriarch Bristlefur"] = { name="Matriarch Bristlefur", kind="rare", x=0.5899, y=0.8006, ext=true },
+        ["nMatriarch Bristlefur"] = { name="Matriarch Bristlefur", kind="rare", x=0.5933, y=0.7919, ext=true },
         ["nMorgaine the Sly"] = { name="Morgaine the Sly", kind="rare", x=0.3081, y=0.6473, ext=true },
         ["nMother Fang"] = { name="Mother Fang", kind="rare", x=0.6214, y=0.4805, ext=true },
         ["nNarg the Taskmaster"] = { name="Narg the Taskmaster", kind="rare", x=0.4091, y=0.7752, ext=true },
@@ -221,7 +223,7 @@ VS.Seed = {
         ["nBoss Galgosh"] = { name="Boss Galgosh", kind="rare", x=0.6807, y=0.6593, ext=true },
         ["nEmogg the Crusher"] = { name="Emogg the Crusher", kind="rare", x=0.7309, y=0.2696, ext=true },
         ["nGrizlak"] = { name="Grizlak", kind="rare", x=0.3458, y=0.2707, ext=true },
-        ["nKackle"] = { name="Kackle", kind="rare", x=0.5363, y=0.5527, ext=true },
+        ["nKackle"] = { name="Kackle", kind="rare", x=0.5413, y=0.5468, ext=true },
         ["nLarge Loch Crocolisk"] = { name="Large Loch Crocolisk", kind="rare", x=0.5890, y=0.3107, ext=true },
         ["nLord Condar"] = { name="Lord Condar", kind="rare", x=0.7462, y=0.7077, ext=true },
         ["nMagosh"] = { name="Magosh", kind="rare", x=0.7012, y=0.6639, ext=true },
@@ -230,6 +232,7 @@ VS.Seed = {
     [1433] = {
         ["nBoulderheart"] = { name="Boulderheart", kind="rare", x=0.8377, y=0.6684, ext=true },
         ["nChatter"] = { name="Chatter", kind="rare", x=0.4740, y=0.4311, ext=true },
+        ["nDro'zem the Blasphemous"] = { name="Dro'zem the Blasphemous", kind="rare", x=0.5971, y=0.4689, ext=true },
         ["nKazon"] = { name="Kazon", kind="rare", x=0.3131, y=0.0938, ext=true },
         ["nRibchaser"] = { name="Ribchaser", kind="rare", x=0.1029, y=0.6642, ext=true },
         ["nRohh the Silent"] = { name="Rohh the Silent", kind="rare", x=0.7098, y=0.4729, ext=true },
@@ -269,6 +272,7 @@ VS.Seed = {
         ["nVultros"] = { name="Vultros", kind="rare", x=0.4612, y=0.5769, ext=true },
     },
     [1437] = {
+        ["nCarrodin"] = { name="Carrodin", kind="rare", x=0.4684, y=0.6413, ext=true },
         ["nDragonmaw Battlemaster"] = { name="Dragonmaw Battlemaster", kind="rare", x=0.4534, y=0.4441, ext=true },
         ["nGarneg Charskull"] = { name="Garneg Charskull", kind="rare", x=0.3842, y=0.4606, ext=true },
         ["nGnawbone"] = { name="Gnawbone", kind="rare", x=0.3154, y=0.2966, ext=true },
@@ -421,11 +425,27 @@ VS.Seed = {
     [1453] = {
         ["nSewer Beast"] = { name="Sewer Beast", kind="rare", x=0.7115, y=0.4876, ext=true },
     },
+    [2482] = {
+        ["nBannerwing Survivor"] = { name="Bannerwing Survivor", kind="rare", x=0.4550, y=0.4058, ext=true },
+        ["nDeath Wailer"] = { name="Death Wailer", kind="rare", x=0.2387, y=0.5451, ext=true },
+        ["nJezerelle the Swaying"] = { name="Jezerelle the Swaying", kind="rare", x=0.4850, y=0.3221, ext=true },
+        ["nLegion Hulk"] = { name="Legion Hulk", kind="rare", x=0.6082, y=0.3495, ext=true },
+        ["nOld Rusthowl"] = { name="Old Rusthowl", kind="rare", x=0.5481, y=0.6879, ext=true },
+        ["nOverseer Myoleth"] = { name="Overseer Myoleth", kind="rare", x=0.4993, y=0.7268, ext=true },
+    },
     [2521] = {
-        ["nFernfeather"] = { name="Fernfeather", kind="rare", x=0.5198, y=0.8146, ext=true },
-        ["nGalemender Delanea"] = { name="Galemender Delanea", kind="rare", x=0.6335, y=0.6286, ext=true },
-        ["nTel'daeor the Stormspeaker"] = { name="Tel'daeor the Stormspeaker", kind="rare", x=0.6567, y=0.5317, ext=true },
-        ["nThe Lost One"] = { name="The Lost One", kind="rare", x=0.5409, y=0.4830, ext=true },
+        ["nDen'dralass"] = { name="Den'dralass", kind="rare", x=0.5669, y=0.3686, ext=true },
+        ["nFernfeather"] = { name="Fernfeather", kind="rare", x=0.5148, y=0.8125, ext=true },
+        ["nMystmane"] = { name="Mystmane", kind="rare", x=0.5869, y=0.3592, ext=true },
+        ["nSlydris"] = { name="Slydris", kind="rare", x=0.5072, y=0.5136, ext=true },
+        ["nSnapbeak the Quick"] = { name="Snapbeak the Quick", kind="rare", x=0.3582, y=0.5739, ext=true },
+    },
+    [2548] = {
+        ["nGul'gash"] = { name="Gul'gash", kind="rare", x=0.8535, y=0.3292, ext=true },
+        ["nKargra the Blind"] = { name="Kargra the Blind", kind="rare", x=0.2669, y=0.4770, ext=true },
+        ["nMad Marrius"] = { name="Mad Marrius", kind="rare", x=0.4562, y=0.5489, ext=true },
+        ["nScaldaron"] = { name="Scaldaron", kind="rare", x=0.3069, y=0.7227, ext=true },
+        ["nTwilight Forgemaster"] = { name="Twilight Forgemaster", kind="rare", x=0.2903, y=0.4671, ext=true },
     },
 }
 else

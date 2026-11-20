@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.45 — 2026-11-20
+
+- **More rares and treasure chests (WoW Forever).** 342 rare spots (was 326), and chest spots updated from WoW Forever's newest data.
+
 ## 0.2.44 — 2026-11-20
 
 - **The first rare spots measured by VoidSweep players (WoW Forever).** Two or more players met Azzere the Skyblade and Sorrow Wing in the same place, so their pins now sit where players actually find them instead of where outside data put them. Every rare you see helps: once two players agree on a spot, the next version ships it.
