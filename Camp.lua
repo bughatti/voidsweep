@@ -83,6 +83,16 @@ local function on() return VS:Config().campBox ~= false end
 ----------------------------------------------------------------------
 -- From a GUID (object or creature) or, failing that, an English object name.
 local GENERIC_NAMES = { Chair = true }   -- names ordinary world objects have too
+-- Camp objects Campfire Tooltips' name list leaves out (CampNames.lua is its copy, kept unchanged):
+-- its rule is "generic names require an ID", but Forever's object tooltips carry NO ID, so these
+-- were never recognized. The user, 2026-11-19: "campfire addon doesnt read spinning wheel" (seen
+-- by name only in VoidDev's scan, Durotar 45.5, 13). By name they count only at a campfire, like
+-- Chair: "Anvil", "Loom", "Tanning Rack" are ordinary world objects too.
+local EXTRA_NAMES = {
+    ["Spinning Wheel"] = 612123, ["Loom"] = 612142, ["Tanning Rack"] = 612122, ["Anvil"] = 612125,
+    ["Greenhouse"] = 612087, ["Field Guide"] = 612088, ["Basic Campfire"] = 529161,
+}
+for n in pairs(EXTRA_NAMES) do GENERIC_NAMES[n] = true end
 local function identify(guid, name)
     if type(guid) == "string" and readable(guid) then
         local e = guid:match("^GameObject%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
@@ -101,9 +111,9 @@ local function identify(guid, name)
             if not (ok and a) then return nil end
         end
         local loc = GetLocale()
-        local id = CD.names[loc] and CD.names[loc][name]
+        local id = (CD.names and CD.names[loc] and CD.names[loc][name]) or ((loc == "enUS" or loc == "enGB") and EXTRA_NAMES[name])
         if id and CD.objects[id] then return CD.objects[id], id end
-        local f = CD.factionNames[loc] and CD.factionNames[loc][name]
+        local f = CD.factionNames and CD.factionNames[loc] and CD.factionNames[loc][name]
         if f then
             -- a banner seen by name only (Forever's object tooltips carry no GUID): whose it is
             -- can't be told, so it's judged as "only if it's your faction's" (Codex review)
@@ -114,6 +124,7 @@ local function identify(guid, name)
         end
     end
 end
+C.Identify = identify   -- tests (tools/cmd/vsweep-camp-test)
 
 ----------------------------------------------------------------------
 -- What a buff is worth to you
@@ -164,7 +175,7 @@ local KEYWORDS = {
 
 local function benefitKey(item, effect)
     local loc = GetLocale()
-    local id = CD.names[loc] and CD.names[loc][item]
+    local id = (CD.names and CD.names[loc] and CD.names[loc][item]) or ((loc == "enUS" or loc == "enGB") and EXTRA_NAMES[item])
     local o = id and CD.objects[id]
     if o and o.benefit then return o.benefit end
     local e = effect:lower()

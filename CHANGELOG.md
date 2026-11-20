@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.43 — 2026-11-20
+
+- **The camp box sees the Spinning Wheel** (WoW Forever), and the Loom, Tanning Rack, Anvil, Greenhouse, Field Guide and Basic Campfire. They were never recognized because their names are also ordinary world objects; now they count when you're at a campfire.
+
 ## 0.2.42 — 2026-11-18
 
 - **Sleeping bag star after your group forms (WoW Forever).** The game takes raid markers off when a group forms, so your star was gone just when your guests could use it. The Bag button now turns into a gold **Star** button: one click puts the star back and says the bag line in /say again.
