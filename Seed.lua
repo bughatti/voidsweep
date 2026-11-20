@@ -39,7 +39,7 @@ VS.Seed = {
     },
     [1413] = {
         ["nAmbassador Bloodrage"] = { name="Ambassador Bloodrage", kind="rare", x=0.4774, y=0.9074, ext=true },
-        ["nAzzere the Skyblade"] = { name="Azzere the Skyblade", kind="rare", x=0.4483, y=0.6410, ext=true },
+        ["nAzzere the Skyblade"] = { name="Azzere the Skyblade", kind="rare", x=0.4490, y=0.6302 },
         ["nBoahn"] = { name="Boahn", kind="rare", x=0.4906, y=0.3390, ext=true },
         ["nBrokespear"] = { name="Brokespear", kind="rare", x=0.5712, y=0.4117, ext=true },
         ["nDishu"] = { name="Dishu", kind="rare", x=0.4960, y=0.1584, ext=true },
@@ -322,7 +322,7 @@ VS.Seed = {
         ["nForeman Rigger"] = { name="Foreman Rigger", kind="rare", x=0.6669, y=0.5233, ext=true },
         ["nPridewing Patriarch"] = { name="Pridewing Patriarch", kind="rare", x=0.5379, y=0.3631, ext=true },
         ["nSister Riven"] = { name="Sister Riven", kind="rare", x=0.2964, y=0.6943, ext=true },
-        ["nSorrow Wing"] = { name="Sorrow Wing", kind="rare", x=0.4927, y=0.3618, ext=true },
+        ["nSorrow Wing"] = { name="Sorrow Wing", kind="rare", x=0.4936, y=0.3490 },
         ["nTaskmaster Whipfang"] = { name="Taskmaster Whipfang", kind="rare", x=0.6455, y=0.5419, ext=true },
         ["nVengeful Ancient"] = { name="Vengeful Ancient", kind="rare", x=0.3045, y=0.6808, ext=true },
     },

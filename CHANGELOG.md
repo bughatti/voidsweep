@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.44 — 2026-11-20
+
+- **The first rare spots measured by VoidSweep players (WoW Forever).** Two or more players met Azzere the Skyblade and Sorrow Wing in the same place, so their pins now sit where players actually find them instead of where outside data put them. Every rare you see helps: once two players agree on a spot, the next version ships it.
+
 ## 0.2.43 — 2026-11-20
 
 - **The camp box sees the Spinning Wheel** (WoW Forever), and the Loom, Tanning Rack, Anvil, Greenhouse, Field Guide and Basic Campfire. They were never recognized because their names are also ordinary world objects; now they count when you're at a campfire.
