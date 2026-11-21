@@ -206,7 +206,7 @@ VS.Seed = {
         ["nFedfennel"] = { name="Fedfennel", kind="rare", x=0.6648, y=0.4089, ext=true },
         ["nGruff Swiftbite"] = { name="Gruff Swiftbite", kind="rare", x=0.2793, y=0.8821, ext=true },
         ["nMatriarch Bristlefur"] = { name="Matriarch Bristlefur", kind="rare", x=0.5933, y=0.7919, ext=true },
-        ["nMorgaine the Sly"] = { name="Morgaine the Sly", kind="rare", x=0.3081, y=0.6473, ext=true },
+        ["nMorgaine the Sly"] = { name="Morgaine the Sly", kind="rare", x=0.3186, y=0.6537 },
         ["nMother Fang"] = { name="Mother Fang", kind="rare", x=0.6214, y=0.4805, ext=true },
         ["nNarg the Taskmaster"] = { name="Narg the Taskmaster", kind="rare", x=0.4091, y=0.7752, ext=true },
         ["nThuros Lightfingers"] = { name="Thuros Lightfingers", kind="rare", x=0.5266, y=0.5891, ext=true },

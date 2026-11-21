@@ -1,5 +1,10 @@
 # VoidSweep Changelog
 
+## 0.2.46 — 2026-11-20
+
+- **Morgaine the Sly (Elwynn Forest) at her real spot (WoW Forever),** confirmed by players.
+- **English names only.** A rare or chest shared by a player whose game is in another language is used only with its English name.
+
 ## 0.2.45 — 2026-11-20
 
 - **More rares and treasure chests (WoW Forever).** 342 rare spots (was 326), and chest spots updated from WoW Forever's newest data.
