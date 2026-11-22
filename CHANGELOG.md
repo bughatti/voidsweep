@@ -1,5 +1,11 @@
 # VoidSweep Changelog
 
+## 0.2.47 — 2026-11-22
+
+- **Sleeping bag: where it is, with coordinates (WoW Forever).** The invite whisper and the /say line name the spot with map coordinates, like "Durotar (45.6, 13.1)", instead of just the zone, and keep the bag's own spot after a reload.
+- **Fixed: per-character settings on WoW Forever** after the game stopped giving addons your realm's name.
+- **Layer hopping:** only layers a Void player can bring you to are offered (the same change as VoidLayer 0.5.2).
+
 ## 0.2.46 — 2026-11-20
 
 - **Morgaine the Sly (Elwynn Forest) at her real spot (WoW Forever),** confirmed by players.

@@ -888,7 +888,9 @@ function C:AnnounceBag(quiet)
         if not quiet then print("|cff00c7ffVoidSweep|r: you just said it; wait a few seconds before saying it again.") end
         return
     end
-    local msg = "My sleeping bag is out" .. (b.where ~= "" and (" at " .. b.where) or "")
+    -- with the bag's coordinates: a zone name alone ("Durotar", right outside Orgrimmar) was confusing (the user)
+    local place = b.place or b.where or ""
+    local msg = "My sleeping bag is out" .. (place ~= "" and (" at " .. place) or "")
         .. ": whisper me \"bag\" for an invite (rested XP bonus, stacks up to 3 times)."
     local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
     local ok = send and pcall(send, msg, "SAY")

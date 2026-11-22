@@ -91,15 +91,36 @@ end
 -- VoidSweepCharDB.bag = { at = server time unrolled, zone = zone name, gone = left the zone }.
 local function saved() VoidSweepCharDB = VoidSweepCharDB or {}; return VoidSweepCharDB.bag end
 
--- left: seconds of the window still to go (a fresh bag: all of it); quiet: no chat line (a reload)
-local function start(left, quiet)
+-- Where you stand, as map coordinates ("52.1, 13.8"): a zone name alone was confusing (the user,
+-- 2026-11-21: "saying i am in durotar when i am right outside org"). nil inside instances / no position.
+local function coords()
+    local m = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+    local p = m and C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(m, "player")
+    if not (p and p.GetXY) then return nil end
+    local x, y = p:GetXY()
+    if secret(x) or secret(y) or type(x) ~= "number" or type(y) ~= "number" or x <= 0 or y <= 0 then return nil end
+    return ("%.1f, %.1f"):format(x * 100, y * 100)
+end
+
+-- "Razor Hill (52.1, 41.8)", "Durotar (45.3, 12.0)", or just the name without a position
+local function placeText(where, xy)
+    if xy then return (where ~= "" and (where .. " ") or "") .. "(" .. xy .. ")" end
+    return where
+end
+B.PlaceText = placeText
+
+-- left: seconds of the window still to go (a fresh bag: all of it); quiet: no chat line (a reload);
+-- xy: the bag's coordinates (a reload: the ones saved when it was unrolled, not where you stand now)
+local function start(left, quiet, xy, savedWhere)
     left = left or BAG_WINDOW
-    local where = GetSubZoneText()
+    local where = savedWhere or GetSubZoneText()   -- a reload: the place name saved with the bag (Codex)
     if not where or where == "" then where = GetZoneText() or "" end
-    active = { untilT = GetTime() + left, where = where, zone = GetZoneText() or "", done = {}, told = {} }
+    xy = xy or (left == BAG_WINDOW and coords()) or nil
+    active = { untilT = GetTime() + left, where = where, xy = xy, place = placeText(where, xy),
+        zone = GetZoneText() or "", done = {}, told = {} }
     if left == BAG_WINDOW then
         VoidSweepCharDB = VoidSweepCharDB or {}
-        VoidSweepCharDB.bag = { at = GetServerTime(), zone = GetZoneText() or "" }
+        VoidSweepCharDB.bag = { at = GetServerTime(), zone = GetZoneText() or "", xy = xy, where = where }
     end
     if on() and not quiet then
         say(("sleeping bag out: a whisper with \"bag\" gets a party invite for the next %d minutes. Click Bag on the camp box to say so in /say and put a star on you so they can find you (right-click Bag takes the star off). /vsw bag turns this off.")
@@ -126,8 +147,10 @@ local function restore()
     elseif s and s.gone and (s.at or 0) > unrolled then
         return   -- (clock odd) a newer bag already left behind
     end
-    start(BAG_WINDOW - ago, true)
-    if not (s and math.abs((s.at or 0) - unrolled) < 30) then
+    local same = s and math.abs((s.at or 0) - unrolled) < 30
+    -- the bag's own spot when we saw it unrolled; else none (you may have walked off since)
+    start(BAG_WINDOW - ago, true, same and s.xy or nil, same and s.where or nil)
+    if not same then
         VoidSweepCharDB.bag = { at = unrolled, zone = GetZoneText() or "" }   -- unrolled before this was saved
     end
     if on() then say(("your sleeping bag is still out: invites back on for %d more minutes."):format(math.ceil((BAG_WINDOW - ago) / 60))) end
@@ -154,7 +177,7 @@ local function onWhisper(msg, sender)
     active.told[sender] = nil
     C_PartyInfo.InviteUnit(sender)
     whisper(("Invited! My sleeping bag is at %s%s: walk onto it and rest a minute (it stacks up to 3 times).")
-        :format(active.where ~= "" and active.where or "my camp", marker() == STAR and ", look for the star over me" or ""), sender)
+        :format(active.place ~= "" and active.place or "my camp", marker() == STAR and ", look for the star over me" or ""), sender)
     say(("invited %s to your sleeping bag."):format(Ambiguate(sender, "none")))
 end
 

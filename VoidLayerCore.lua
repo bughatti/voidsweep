@@ -702,6 +702,10 @@ function ns.LayerCoreBuild(owner)
             if state and state.phase == "asking" and state.host == asked1 then
                 state.why = state.why or {}
                 state.why.none = (state.why.none or 0) + 1
+                -- no answer: not offered as a helper again until they report in (the user, 2026-11-21: "if that
+                -- player is no longer reachable, it should go away")
+                local a = census[state.zone] and census[state.zone][asked1]
+                if a then a.host = false; changed() end
                 nextHost()
             end
         end)
@@ -938,6 +942,9 @@ function ns.LayerCoreBuild(owner)
                 local k = answer:match("^no:(%a+)$")
                 k = (k == "busy" or k == "layer" or k == "off") and k or "busy"
                 if k == "off" then C.offNames[who] = GetTime() end   -- not counted as a Layer helper for an hour
+                -- busy / off: not offered as a helper on that layer until their next report says they can (2026-11-21)
+                local a = census[state.zone] and census[state.zone][who]
+                if a and (k == "busy" or k == "off") then a.host = false end
                 state.why = state.why or {}
                 state.why[k] = (state.why[k] or 0) + 1
                 -- moved off that layer: what they told us before is stale, so they stop being offered
@@ -1000,6 +1007,9 @@ function ns.LayerCoreBuild(owner)
             end
             return
         end
+        -- only when someone there can bring you over right now: the popup says so (2026-11-21: Hops to rare layers
+        -- failed with the one Void player there busy)
+        if #C:Hosts(zone, pair) == 0 then return end
         if not canOffer() then return end
         if lastPopup and now() - lastPopup < POPUP_GAP then return end
         lastPopup = now()
