@@ -57,6 +57,7 @@ VS.CategoryColor = {
     decor      = { 0.18, 0.85, 0.82, hex = "2ed9d1" },
     junk       = { 0.62, 0.62, 0.62, hex = "9e9e9e" },
     profession = { 0.82, 0.60, 0.34, hex = "d19957" },
+    camp       = { 1.00, 0.55, 0.10, hex = "ff8c1a" },   -- WoW Forever campfires (CampNet.lua; drawn as a fire icon)
     default    = { 1.00, 1.00, 1.00, hex = "ffffff" },
 }
 
@@ -64,7 +65,7 @@ VS.defaults = {
     -- Clean default: core content on, collectibles opt-in (toggle via the map
     -- button). This is the anti-"busy as hell" — the map is focused until you
     -- ask for more.
-    show = { rare = true, chest = true, worldboss = true, lore = true, supply = true },
+    show = { rare = true, chest = true, worldboss = true, lore = true, supply = true, camp = true },
     showCompleted = false,   -- show treasures you've already looted
     sync = true,             -- crowd rare-up broadcasts (VoidSync)
     showMinimap = true,      -- known/reported pins on the minimap
@@ -131,6 +132,7 @@ f:SetScript("OnEvent", function(_, event)
         if not VS.FOREVER then VS.Scanner:Rescan() end
         VS.Pins:Init()
         VS.Sync:Init()
+        if VS.CampNet then VS.CampNet:Init() end   -- WoW Forever: campfires shared over VoidNet
         VS.Minimap:Init()
         VS.MapButton:Init()
         -- catch previously-looted, completion-less chests as you revisit them. Not on Forever: with

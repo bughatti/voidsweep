@@ -31,6 +31,7 @@ local KIND_LABEL = {
     decor      = "Decor",
     junk       = "Fun / Junk",
     profession = "Profession",
+    camp       = "Campfire",
 }
 
 -- Colored dot per category (WhiteCircle-RaidBlips tinted). One look for every
@@ -64,6 +65,18 @@ function VoidSweepPinMixin:OnAcquired(entry, x, y, isLive)
     self.isLive = isLive
     self:SetPosition(x, y)
     applyDot(self.icon, entry)
+    -- a campfire other Void players reported (CampNet.lua): a fire icon, faded when it's on another layer
+    if entry.campfire then
+        self.icon:SetTexture(VS.CampNet.FIRE_ICON)
+        self.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        self.icon:SetVertexColor(1, 1, 1)
+        self.icon:SetDesaturated(entry.otherLayer and true or false)
+        self:SetAlpha(entry.otherLayer and 0.6 or 1)
+        self:SetSize(14, 14)
+        self.ring:Hide()
+        self:Show()
+        return
+    end
     -- color = category (set above); alpha/size = state.
     local sight = entry.sight                     -- seen on a nameplate / target lately (Sightings.lua)
     local chest = entry.chestState                -- WoW Forever chests (Chests.lua)
@@ -99,6 +112,12 @@ function VoidSweepPinMixin:OnMouseEnter()
     if not e then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine(e.name or "Unknown", 1, 1, 1)
+    if e.campfire and VS.CampNet then
+        VS.CampNet:TooltipLines(e.campfire, function(...) GameTooltip:AddLine(...) end)
+        GameTooltip:AddLine("Click to travel", 0.7, 0.7, 0.7)
+        GameTooltip:Show()
+        return
+    end
     GameTooltip:AddLine(KIND_LABEL[e.kind] or "Point of Interest", 0.6, 0.8, 1)
 
     if e.chestSpot and VS.Chests then
@@ -299,6 +318,12 @@ function VS.Pins:Build(mapID)
     -- WoW Forever chests (Chests.lua): seen lately, opened, your own spots, possible spots if on
     if VS.Chests then
         for _, c in ipairs(VS.Chests:Candidates(mapID)) do
+            consider(c.entry, c.x, c.y, false)
+        end
+    end
+    -- WoW Forever campfires Void players reported in the last 10 minutes (CampNet.lua)
+    if VS.CampNet then
+        for _, c in ipairs(VS.CampNet:Candidates(mapID)) do
             consider(c.entry, c.x, c.y, false)
         end
     end

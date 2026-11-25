@@ -207,6 +207,12 @@ function Sync:OnMessage(payload, sender)
         if rateOK(sender) and VS.Sightings then VS.Sightings:OnShared(sn, sender, tonumber(snv)) end
         return
     end
+    -- a WoW Forever campfire (CampNet.lua validates it and passes it on); it rate-limits by sender itself
+    local cf = payload:match("^CF:1:(.+)$")
+    if cf then
+        if VS.CampNet then VS.CampNet:OnShared(cf, sender) end
+        return
+    end
     -- a WoW Forever chest seen or opened (Chests.lua validates it against the listed spots)
     local ch = payload:match("^CH:1:(.+)$")
     if ch then

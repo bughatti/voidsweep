@@ -1,5 +1,12 @@
 # VoidSweep Changelog
 
+## 0.2.49 — 2026-11-25
+
+- **Campfires on your map (WoW Forever).** When a VoidSweep player sits at a campfire, it shows on every Void player's world map and minimap as a fire icon. It goes away 10 minutes after the last player there reported it. Hover it to see what's at the fire, judged for you (NEW / have / no use), which layer it's on, and how many players reported it. Click it for the way there.
+- **A small popup** when a fire in your zone has a buff that's NEW for you: how far and which way, its items, a **Go** button, and a **Hop** button when it's on another layer. The player who reported it is asked first, because they're standing on that layer.
+- **Only a real campfire counts:** a fire shows only where a campfire was actually seen, so an inn fireplace (which gives the same buff) never shows as one.
+- Switches in the map's VoidSweep menu: **Campfires** (the icons), **Share campfires I'm at**, **Campfire popup**.
+
 ## 0.2.48 — 2026-11-24
 
 - **Layers work again after the game's November 20 update (WoW Forever).** The update gave every NPC a number of its own, so the layer read off the NPCs around you kept jumping. The layer engine every Void addon shares (from VoidLayer 0.6.0) now names your layer itself and lets the game keep the name right: a world refresh or a hop gives you a new name, Void players who turn out to be on one layer take one name, and a layer hop turns down an invite from a helper who's on your layer already.

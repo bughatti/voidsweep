@@ -19,6 +19,8 @@ local CATS = {
 }
 -- WoW Forever: supply containers (Food Crate, Water Barrel, Weapon Crate ...; Chests.lua), their own category
 if VS.Chests then table.insert(CATS, 4, { key = "supply", label = "Supplies" }) end
+-- WoW Forever: campfires Void players reported in the last 10 minutes (CampNet.lua)
+if VS.Chests then CATS[#CATS + 1] = { key = "camp", label = "Campfires", live = true } end
 
 local function refresh()
     return MenuResponse and MenuResponse.Refresh   -- keep the menu open on toggle
@@ -76,6 +78,11 @@ local function generator(_, root)
         local swatch = ("|TInterface\\Buttons\\WHITE8X8:10:10:0:0:8:8:0:8:0:8:%d:%d:%d|t"):format(
             math.floor(col[1] * 255), math.floor(col[2] * 255), math.floor(col[3] * 255))
         local label = ("%s  %s (%d/%d)"):format(swatch, c.label, got, tot)
+        if c.live then   -- campfires: how many are up on this map now, not "collected"
+            local mapID = WorldMapFrame and WorldMapFrame:GetMapID()
+            local n = (mapID and VS.CampNet) and VS.CampNet:Count(mapID) or 0
+            label = ("|T%s:12:12:0:0:64:64:5:59:5:59|t  %s (%d here now)"):format(VS.CampNet and VS.CampNet.FIRE_ICON or "", c.label, n)
+        end
         root:CreateCheckbox(label,
             function() return cfg.show[c.key] ~= false end,
             function()
@@ -111,6 +118,15 @@ local function generator(_, root)
     root:CreateCheckbox("Crowd sync",
         function() return cfg.sync end,
         function() cfg.sync = not cfg.sync; VS.Pins:Refresh(); VS.Sync:CountNow(); return refresh() end)
+    if VS.CampNet and VS.Chests then
+        -- WoW Forever: share the campfires you're at, and the popup for a fire with a buff NEW for you
+        root:CreateCheckbox("Share campfires I'm at",
+            function() return cfg.campNet ~= false end,
+            function() cfg.campNet = (cfg.campNet == false); return refresh() end)
+        root:CreateCheckbox("Campfire popup (a buff NEW for me, in my zone)",
+            function() return cfg.campAlert ~= false end,
+            function() cfg.campAlert = (cfg.campAlert == false); return refresh() end)
+    end
     root:CreateCheckbox("Players-here box",
         function() return VoidPresence:IsShown() end,
         function() VoidPresence:SetShown(not VoidPresence:IsShown()); return refresh() end)
@@ -178,3 +194,17 @@ function VS.MapButton:Init()
     end)
     self.btn = btn
 end
+
+-- Read-only hooks for the all-in-one VoidHub window (2026-11-24): the hub's Map radar settings page shows the
+-- same categories and switches as this button's menu, on the same config. Nothing here changes the menu.
+_G.VoidSweepHub = {
+    CATS = CATS,
+    Config = function() return VS:Config() end,
+    Color = function(key) return VS.CategoryColor[key] or VS.CategoryColor.default end,
+    RefreshPins = function() VS.Pins:Refresh() end,
+    CountNow = function() if VS.Sync then VS.Sync:CountNow() end end,
+    ToggleSpots = function() if VS.Chests then VS.Chests:ToggleSpots() end end,
+    Forever = VS.Chests ~= nil,
+    CampNet = function() return VS.CampNet end,
+    FireIcon = function() return VS.CampNet and VS.CampNet.FIRE_ICON end,
+}

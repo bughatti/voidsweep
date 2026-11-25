@@ -778,6 +778,21 @@ function C:Refresh()
     box:Show()
 end
 
+-- For CampNet.lua (campfires on everyone's map over VoidNet, 2026-11-24): are you at a campfire right
+-- now (the game's aura), and the camp objects seen at it (object / creature IDs, sorted). Only objects
+-- seen here count: a buff you wear came from some camp, not necessarily this one.
+function C:AtCamp()
+    if not forever() or inDungeon() then return false, {} end
+    local list, at = here()
+    local ids, dup = {}, {}
+    for _, s in ipairs(list) do
+        if s.id and not dup[s.id] then dup[s.id] = true; ids[#ids + 1] = s.id end
+    end
+    table.sort(ids)
+    return at and true or false, ids
+end
+C.COLORS, C.WORD, C.ORDER = COLORS, WORD, ORDER
+
 ----------------------------------------------------------------------
 -- Seeing objects: tooltips (hover) and the soft-interact target (walking up)
 ----------------------------------------------------------------------

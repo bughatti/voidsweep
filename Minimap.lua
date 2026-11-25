@@ -90,14 +90,32 @@ function MM:Update()
             end
             if (sx * sx + sy * sy) <= (half * half) then   -- inside the minimap
                 local p = acquire()
-                local col = (c.entry.confirmed and VS.ConfirmedSpawnColor)
-                    or (c.entry.heat and VS.SpawnSpotColor)
-                    or VS.CategoryColor[c.entry.kind] or VS.CategoryColor.default
-                p:SetVertexColor(col[1], col[2], col[3])
-                -- one size, one brightness for every dot (2026-11-17, "there is no need for that"):
-                -- what a dot is, is its color; the tooltip on the world map says the rest
-                p:SetAlpha(MM_ALPHA)
-                p:SetSize(PIN_SIZE, PIN_SIZE)
+                if c.entry.campfire then
+                    -- a reported campfire (CampNet.lua): the fire icon, faded on another layer
+                    if not p.fire then
+                        p:SetTexture(VS.CampNet.FIRE_ICON)
+                        p:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                        p.fire = true
+                    end
+                    p:SetVertexColor(1, 1, 1)
+                    p:SetDesaturated(c.entry.otherLayer and true or false)
+                    p:SetAlpha(c.entry.otherLayer and 0.5 or 0.95)
+                    p:SetSize(12, 12)
+                else
+                    if p.fire then
+                        p:SetAtlas("WhiteCircle-RaidBlips")
+                        p:SetDesaturated(false)
+                        p.fire = nil
+                    end
+                    local col = (c.entry.confirmed and VS.ConfirmedSpawnColor)
+                        or (c.entry.heat and VS.SpawnSpotColor)
+                        or VS.CategoryColor[c.entry.kind] or VS.CategoryColor.default
+                    p:SetVertexColor(col[1], col[2], col[3])
+                    -- one size, one brightness for every dot (2026-11-17, "there is no need for that"):
+                    -- what a dot is, is its color; the tooltip on the world map says the rest
+                    p:SetAlpha(MM_ALPHA)
+                    p:SetSize(PIN_SIZE, PIN_SIZE)
+                end
                 p:ClearAllPoints()
                 p:SetPoint("CENTER", Minimap, "CENTER", sx, sy)
             end
