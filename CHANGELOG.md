@@ -1,5 +1,9 @@
 # VoidSweep Changelog
 
+## 0.2.50 — 2026-11-26
+
+- **Fixed: Void players losing each other every hour (WoW Forever).** On the hour, every player's addon checked the new hour's shared channel at once. With 200+ players the channel's owner couldn't answer them all in time, so most addons gave up on it and moved to backup channels: within minutes everyone was spread over 4 channels, sharing only with a slice of the others, and the players box dropped (230 to 65 on the Alliance side). Now a few players check right away and the rest later, spread out, so everyone stays together. A channel taken over by someone else is still left within minutes. Also: the players box shows the right count a minute after the hour instead of five, and a channel's owner is no longer missed in channels of 300+ players.
+
 ## 0.2.49 — 2026-11-25
 
 - **Campfires on your map (WoW Forever).** When a VoidSweep player sits at a campfire, it shows on every Void player's world map and minimap as a fire icon. It goes away 10 minutes after the last player there reported it. Hover it to see what's at the fire, judged for you (NEW / have / no use), which layer it's on, and how many players reported it. Click it for the way there.

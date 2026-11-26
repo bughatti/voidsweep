@@ -265,18 +265,30 @@ local function gpsAlerts()
     return loaded and not (VoidGPSDB and VoidGPSDB.rareAlerts == false)
 end
 local function dungeonAlert(unit, name, cls)
-    if UnitIsDead(unit) or gpsAlerts() then return end
+    local dead = UnitIsDead(unit)
+    if issecretvalue and issecretvalue(dead) then dead = false end
+    if dead or gpsAlerts() then return end
     local cfg = VS.Config and VS:Config()
     if cfg and cfg.show and cfg.show.rare == false then return end   -- rares hidden in the map menu
     -- a new run: another dungeon, or the same one again after leaving (runKey is cleared
     -- outside; the instance ID alone is the same for every run of a dungeon)
     local key = select(8, GetInstanceInfo()) or 0
     if key ~= runKey then runKey, runSeen = key, {} end
-    if runSeen[name] then return end
-    runSeen[name] = true
     local lv = UnitLevel(unit)
+    if issecretvalue and issecretvalue(lv) then lv = nil end
+    -- the game hides names inside dungeons (2026-11-25, Blackmaw Hold: two rares, no alert): a hidden
+    -- name can't be a key or go in a message, so those count by class + level
+    local hidden = issecretvalue and issecretvalue(name)
+    local seenKey = hidden and (cls .. ":" .. tostring(lv)) or name
+    if runSeen[seenKey] then return end
+    runSeen[seenKey] = true
     local what = (cls == "rareelite" and "rare elite" or "rare") .. ((lv and lv > 0) and (", level " .. lv) or "")
     PlaySound(SOUNDKIT.RAID_WARNING)
+    if hidden then
+        UIErrorsFrame:AddMessage("A " .. what .. " is here!", 0.2, 1, 0.2)
+        DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33A %s is here|r (the game hides its name in dungeons)."):format(what))
+        return
+    end
     UIErrorsFrame:AddMessage(name .. " is here! (" .. what .. ")", 0.2, 1, 0.2)
     DEFAULT_CHAT_FRAME:AddMessage(("|cff00c7ff[VoidSweep]|r |cff33ff33%s is here|r (%s)."):format(name, what))
 end
@@ -284,11 +296,14 @@ end
 local function check(unit)
     if not UnitExists(unit) then return end
     local cls = UnitClassification(unit)
+    if issecretvalue and issecretvalue(cls) then return end
     if cls ~= "rare" and cls ~= "rareelite" then return end
-    if not UnitCanAttack("player", unit) then return end
+    local atk = UnitCanAttack("player", unit)
+    if not (issecretvalue and issecretvalue(atk)) and not atk then return end
     local name = UnitName(unit)
-    if not name or (issecretvalue and issecretvalue(name)) then return end
+    if not name then return end
     if inDungeon() then dungeonAlert(unit, name, cls); return end
+    if issecretvalue and issecretvalue(name) then return end
     local mapID, x, y = playerPos()
     if not mapID then return end
     local e, d = match(name, mapID, x, y)
